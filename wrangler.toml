@@ -8,7 +8,7 @@ database_id = "fd3a3dae-98df-43ce-9c9b-7edac090c1ed"
 
 [[kv_namespaces]]
 binding = "USERS"
-id = "PASTE_KV_ID"
+id = "fc143f0be10e4db4a48c594869d91d77"
 
 [vars]
 SESSION_SECRET = "datdai-bimat-2026"
