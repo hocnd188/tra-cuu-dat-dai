@@ -262,7 +262,7 @@ renderTabs();render();
 <span id="__authwho" style="opacity:.9"></span>
 <a id="__authadmin" href="/admin.html" style="color:#ffe08a;text-decoration:none;display:none;font-weight:600">Quản trị</a>
 <a id="__authout" href="#" style="color:#fff;text-decoration:underline">Đăng xuất</a></div>
-<script>(function(){fetch('/api/me').then(r=>r.json()).then(function(u){var w=document.getElementById('__authwho');if(w)w.textContent=u.u||'';if(u.r==='admin'){var a=document.getElementById('__authadmin');if(a)a.style.display='inline';}}).catch(function(){});
+<script>(function(){fetch('/api/me').then(r=>r.json()).then(function(u){var w=document.getElementById('__authwho');if(w)w.textContent=(u.username||u.u||'');if(u.is_admin||u.r==='admin'){var a=document.getElementById('__authadmin');if(a)a.style.display='inline';}}).catch(function(){});
 var o=document.getElementById('__authout');if(o)o.onclick=function(e){e.preventDefault();fetch('/api/logout',{method:'POST'}).then(function(){location.reload();});};})();</script>
 </body>
 </html>
