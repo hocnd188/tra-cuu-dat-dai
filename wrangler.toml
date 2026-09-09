@@ -5,3 +5,10 @@ pages_build_output_dir = "."
 binding = "DB"
 database_name = "tra-cuu-dat-dai-db2"
 database_id = "fd3a3dae-98df-43ce-9c9b-7edac090c1ed"
+
+[[kv_namespaces]]
+binding = "USERS"
+id = "PASTE_KV_ID"
+
+[vars]
+SESSION_SECRET = "datdai-bimat-2026"
