@@ -1,0 +1,7 @@
+name = "tra-cuu-dat-dai"
+pages_build_output_dir = "."
+
+[[d1_databases]]
+binding = "DB"
+database_name = "tra-cuu-dat-dai-db2"
+database_id = "fd3a3dae-98df-43ce-9c9b-7edac090c1ed"
