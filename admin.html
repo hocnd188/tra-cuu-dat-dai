@@ -51,8 +51,8 @@ function load(){
   fetch("/api/users").then(async r=>{const d=await r.json();if(!r.ok)throw new Error(d.error||"Lỗi");return d;})
    .then(d=>{const tb=document.getElementById("tb");tb.innerHTML=d.users.map(u=>{
      const adm=!!u.is_admin;
-     const qa=adm?'<span class="tag">luôn có</span>':'<input type="checkbox" '+(u.can_qa?'checked':'')+' onchange="setPerm('+u.id+',\'can_qa\',this.checked)">';
-     const ai=adm?'<span class="tag">luôn có</span>':'<input type="checkbox" '+(u.can_ai?'checked':'')+' onchange="setPerm('+u.id+',\'can_ai\',this.checked)">';
+     const qa=adm?'<input type="checkbox" checked disabled title="Admin luôn có quyền, không thể tắt">':'<input type="checkbox" '+(u.can_qa?'checked':'')+' onchange="setPerm('+u.id+',\'can_qa\',this.checked)">';
+     const ai=adm?'<input type="checkbox" checked disabled title="Admin luôn có quyền, không thể tắt">':'<input type="checkbox" '+(u.can_ai?'checked':'')+' onchange="setPerm('+u.id+',\'can_ai\',this.checked)">';
      return '<tr><td>'+u.id+'</td><td>'+esc(u.username)+'</td><td>'+(adm?'<span class="tag">admin</span>':'người dùng')+'</td>'
        +'<td>'+qa+'</td><td>'+ai+'</td>'
        +'<td style="font-size:12px;color:#789">'+esc((u.created_at||"").slice(0,10))+'</td>'
