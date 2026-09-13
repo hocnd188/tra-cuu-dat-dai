@@ -71,7 +71,7 @@ function loadAI(){
 }
 function setPerm(id,field,val){
   const body={id:id};body[field]=val;
-  fetch("/api/set-perm",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
+  fetch("/api/users",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
    .then(async r=>{const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||("Lỗi HTTP "+r.status));return d;})
    .then(()=>{const m=document.getElementById("m2");m.textContent="Đã lưu quyền.";m.className="msg ok";})
    .catch(e=>{const m=document.getElementById("m2");m.textContent="Lỗi lưu quyền: "+e.message;m.className="msg err";load();});
