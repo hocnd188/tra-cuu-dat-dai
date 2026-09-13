@@ -70,8 +70,8 @@ function loadAI(){
    .catch(e=>{document.getElementById("aitb").innerHTML='<tr><td colspan="4" class="err">'+esc(e.message)+'</td></tr>';});
 }
 function setPerm(id,field,val){
-  const body={id:id};body[field]=val;
-  fetch("/api/users",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
+  const body={action:"set_perm",id:id};body[field]=val;
+  fetch("/api/users",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
    .then(async r=>{const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||("Lỗi HTTP "+r.status));return d;})
    .then(()=>{const m=document.getElementById("m2");m.textContent="Đã lưu quyền.";m.className="msg ok";})
    .catch(e=>{const m=document.getElementById("m2");m.textContent="Lỗi lưu quyền: "+e.message;m.className="msg err";load();});
