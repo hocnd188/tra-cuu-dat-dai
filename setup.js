@@ -13,7 +13,7 @@ export async function onRequestPost({ request, env }) {
     return json({ error: "Cần username và mật khẩu ≥ 6 ký tự" }, 400);
   const { salt, hash } = await hashPassword(password);
   await env.DB.prepare(
-    "INSERT INTO users(username,salt,hash,is_admin,created_at) VALUES(?,?,?,1,?)"
+    "INSERT INTO users(username,salt,hash,is_admin,can_qa,can_ai,created_at) VALUES(?,?,?,1,1,1,?)"
   ).bind(username, salt, hash, new Date().toISOString()).run();
   return json({ ok: true });
 }

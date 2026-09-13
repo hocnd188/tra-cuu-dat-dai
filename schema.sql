@@ -4,6 +4,8 @@ CREATE TABLE IF NOT EXISTS users(
   salt TEXT NOT NULL,
   hash TEXT NOT NULL,
   is_admin INTEGER NOT NULL DEFAULT 0,
+  can_qa INTEGER NOT NULL DEFAULT 0,
+  can_ai INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS sessions(
@@ -11,4 +13,8 @@ CREATE TABLE IF NOT EXISTS sessions(
   user_id INTEGER NOT NULL,
   expires_at INTEGER NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+CREATE TABLE IF NOT EXISTS ai_usage(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER, username TEXT, ts TEXT NOT NULL,
+  cau_hoi TEXT, model TEXT, ok INTEGER, ghi_chu TEXT
+);

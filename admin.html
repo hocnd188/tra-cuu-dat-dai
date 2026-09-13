@@ -51,8 +51,8 @@ function load(){
   fetch("/api/users").then(async r=>{const d=await r.json();if(!r.ok)throw new Error(d.error||"Lỗi");return d;})
    .then(d=>{const tb=document.getElementById("tb");tb.innerHTML=d.users.map(u=>{
      const adm=!!u.is_admin;
-     const qa=adm?'<input type="checkbox" checked disabled title="Admin luôn có quyền, không thể tắt">':'<input type="checkbox" '+(u.can_qa?'checked':'')+' onchange="setPerm('+u.id+',\'can_qa\',this.checked)">';
-     const ai=adm?'<input type="checkbox" checked disabled title="Admin luôn có quyền, không thể tắt">':'<input type="checkbox" '+(u.can_ai?'checked':'')+' onchange="setPerm('+u.id+',\'can_ai\',this.checked)">';
+     const qa=adm?'<span class="tag">luôn có</span>':'<input type="checkbox" '+(u.can_qa?'checked':'')+' onchange="setPerm('+u.id+',\'can_qa\',this.checked)">';
+     const ai=adm?'<span class="tag">luôn có</span>':'<input type="checkbox" '+(u.can_ai?'checked':'')+' onchange="setPerm('+u.id+',\'can_ai\',this.checked)">';
      return '<tr><td>'+u.id+'</td><td>'+esc(u.username)+'</td><td>'+(adm?'<span class="tag">admin</span>':'người dùng')+'</td>'
        +'<td>'+qa+'</td><td>'+ai+'</td>'
        +'<td style="font-size:12px;color:#789">'+esc((u.created_at||"").slice(0,10))+'</td>'
@@ -70,11 +70,11 @@ function loadAI(){
    .catch(e=>{document.getElementById("aitb").innerHTML='<tr><td colspan="4" class="err">'+esc(e.message)+'</td></tr>';});
 }
 function setPerm(id,field,val){
-  const body={};body[field]=val;
-  fetch("/api/users/"+id,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
-   .then(async r=>{const d=await r.json();if(!r.ok)throw new Error(d.error||"Lỗi");})
+  const body={id:id};body[field]=val;
+  fetch("/api/set-perm",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
+   .then(async r=>{const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||("Lỗi HTTP "+r.status));return d;})
    .then(()=>{const m=document.getElementById("m2");m.textContent="Đã lưu quyền.";m.className="msg ok";})
-   .catch(e=>{const m=document.getElementById("m2");m.textContent=e.message;m.className="msg err";load();});
+   .catch(e=>{const m=document.getElementById("m2");m.textContent="Lỗi lưu quyền: "+e.message;m.className="msg err";load();});
 }
 document.getElementById("add").onclick=function(){
   const nu=document.getElementById("nu").value.trim(),np=document.getElementById("np").value,

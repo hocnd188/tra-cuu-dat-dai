@@ -112,41 +112,50 @@
 .stbtn{padding:11px 16px;color:#cdd8e4;font-size:14px;font-weight:700;cursor:pointer;border:none;background:none;border-bottom:3px solid transparent}
 .stbtn.on{color:#fff;border-bottom-color:#f0c25b;background:rgba(255,255,255,.06)}
 #viewHoidap{max-width:1180px;margin:0 auto;padding:16px}
-.qa-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+.qa-grid{display:grid;grid-template-columns:minmax(0,420px) minmax(0,1fr);gap:18px;align-items:start;max-width:1180px;margin:0 auto}
 .qa-grid>div:last-child{position:sticky;top:12px}
-.qa-paper{max-height:calc(100vh - 140px)}
-@media(max-width:900px){.qa-grid{grid-template-columns:1fr}.qa-grid>div:last-child{position:static}}
-.qa-card{background:#fff;border:1px solid #e4e2da;border-radius:12px;padding:16px}
-.qa-card h3{margin:0 0 10px;font-size:14px;color:#173a5e}
-.qa-seg{display:flex;gap:6px;margin-bottom:10px}
-.qa-seg button{flex:1;padding:8px;border:1px solid #e4e2da;background:#fff;border-radius:8px;cursor:pointer;font-weight:600;font-size:13px;color:#5c6672}
-.qa-seg button.on{background:#173a5e;color:#fff;border-color:#173a5e}
-#qin{width:100%;min-height:130px;resize:vertical;font:inherit;line-height:1.55;border:1px solid #e4e2da;border-radius:8px;padding:10px;box-sizing:border-box}
-.qa-samples{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
-.qa-samples button{font-size:12px;padding:6px 9px;border:1px dashed #cfd6dd;border-radius:20px;background:#fafbfc;cursor:pointer;color:#173a5e}
-.qa-go{margin-top:10px;width:100%;padding:12px;background:#173a5e;color:#fff;border:none;border-radius:9px;font-size:14.5px;font-weight:700;cursor:pointer}
-.qa-go.ai{background:#7a3ca0}
-.qa-go:disabled{opacity:.5;cursor:default}
-.qa-note{font-size:12px;color:#5c6672;margin-top:8px}
-.qa-banner{border-radius:9px;padding:10px 12px;font-size:12.5px;line-height:1.5;margin-bottom:12px;border:1px solid}
-.qa-warn{background:#fbf1de;border-color:#e6c68a;color:#6b4708}
-.qa-ok{background:#e9f3ee;border-color:#bcd9c8;color:#276749}
-.qa-bad{background:#fbeceb;border-color:#e6b6b1;color:#9d2f27}
-.qa-cc{border:1px solid #e4e2da;border-radius:8px;padding:9px 11px;margin-bottom:8px;background:#fcfdfe;cursor:pointer}
-.qa-cc:hover{border-color:#173a5e}
-.qa-cc .l{font-size:12px;font-weight:700;color:#173a5e}
-.qa-cc .t{font-size:12.5px;color:#3a4048;margin-top:3px;line-height:1.45}
-.qa-cc .s{font-size:11px;color:#9d2f27;font-weight:700;margin-top:4px}
-.qa-paperwrap{background:#fff;border:1px solid #e4e2da;border-radius:12px;overflow:hidden}
-.qa-paperbar{display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:#f4f6f8;border-bottom:1px solid #e4e2da}
-.qa-paperbar .t{font-size:13px;font-weight:700;color:#173a5e}
-.qa-copy{font-size:12px;padding:6px 12px;border:1px solid #173a5e;color:#173a5e;background:#fff;border-radius:7px;cursor:pointer;font-weight:600}
-.qa-paper{font-family:"Times New Roman",Georgia,serif;color:#111;padding:24px 28px;font-size:15.5px;line-height:1.6;white-space:pre-wrap;overflow:auto}
-.qa-empty{color:#5c6672;font-size:13.5px;padding:26px;text-align:center;font-family:system-ui,Arial}
-.qa-spin{display:inline-block;width:14px;height:14px;border:2px solid #173a5e;border-top-color:transparent;border-radius:50%;animation:qasp .7s linear infinite;vertical-align:-2px;margin-right:7px}
+@media(max-width:960px){.qa-grid{grid-template-columns:1fr}.qa-grid>div:last-child{position:static}}
+.qa-card{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:18px;box-shadow:0 1px 3px rgba(20,25,35,.04)}
+.qa-card+.qa-card{margin-top:14px}
+.qa-card h3{margin:0 0 12px;font-size:14px;font-weight:700;color:var(--ink);display:flex;align-items:center;gap:7px}
+.qa-card h3 .qa-note{font-weight:500}
+.qa-seg{display:flex;gap:6px;margin-bottom:12px;background:var(--page);border-radius:9px;padding:3px}
+.qa-seg button{flex:1;padding:8px;border:none;background:transparent;border-radius:7px;cursor:pointer;font-weight:600;font-size:13px;color:var(--ink-soft);transition:background .15s,color .15s}
+.qa-seg button.on{background:#1b7a43;color:#fff;box-shadow:0 1px 2px rgba(0,0,0,.12)}
+#qin{width:100%;min-height:140px;resize:vertical;font:inherit;font-size:14px;line-height:1.6;border:1px solid var(--line);border-radius:10px;padding:12px;box-sizing:border-box;transition:border-color .15s}
+#qin:focus{outline:none;border-color:#1b7a43;box-shadow:0 0 0 3px rgba(27,122,67,.12)}
+.qa-samples{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0 4px}
+.qa-samples button{font-size:12px;padding:6px 11px;border:1px solid var(--line);border-radius:20px;background:var(--page);cursor:pointer;color:var(--ink-soft);font-weight:500;transition:border-color .15s,color .15s}
+.qa-samples button:hover{border-color:#1b7a43;color:#1b7a43}
+.qa-go{margin-top:12px;width:100%;padding:12px 10px;background:#1b7a43;color:#fff;border:none;border-radius:10px;font-size:13.5px;line-height:1.4;font-weight:700;cursor:pointer;transition:background .15s,transform .1s;display:flex;align-items:center;justify-content:center;gap:8px;text-align:center}
+.qa-go:hover:not(:disabled){background:#166238}
+.qa-go:active:not(:disabled){transform:scale(.99)}
+.qa-go.ai{background:var(--primary)}
+.qa-go.ai:hover:not(:disabled){background:#5f1720}
+.qa-go:disabled{opacity:.45;cursor:default}
+.qa-note{font-size:12px;color:var(--ink-soft);margin-top:8px;line-height:1.5}
+
+.qa-banner{border-radius:10px;padding:11px 14px;font-size:12.5px;line-height:1.6;margin-bottom:14px;border:1px solid}
+.qa-warn{background:#fdf6e6;border-color:#e9d29a;color:#7a5a12}
+.qa-ok{background:#e9f5ee;border-color:#a9d8bd;color:#1b7a43}
+.qa-bad{background:var(--primary-soft);border-color:#e3b8bd;color:var(--primary)}
+.qa-cc{border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin-bottom:8px;background:var(--paper);cursor:pointer;transition:border-color .15s,box-shadow .15s}
+.qa-cc:hover{border-color:#1b7a43;box-shadow:0 1px 4px rgba(27,122,67,.12)}
+.qa-cc .l{font-size:12.5px;font-weight:700;color:#1b7a43}
+.qa-cc .t{font-size:12.5px;color:var(--ink-soft);margin-top:4px;line-height:1.5}
+.qa-cc .s{font-size:11px;color:var(--primary);font-weight:700;margin-top:5px}
+.qa-paperwrap{background:var(--paper);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(20,25,35,.04)}
+.qa-paperbar{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;background:var(--page);border-bottom:1px solid var(--line)}
+.qa-paperbar .t{font-size:13px;font-weight:700;color:var(--ink)}
+.qa-copy{font-size:12px;padding:7px 13px;border:1px solid #1b7a43;color:#1b7a43;background:var(--paper);border-radius:8px;cursor:pointer;font-weight:600;transition:background .15s,color .15s}
+.qa-copy:hover{background:#1b7a43;color:#fff}
+.qa-paper{font-family:"Times New Roman",Georgia,serif;color:#111;padding:26px 30px;font-size:15.5px;line-height:1.65;white-space:pre-wrap;overflow:auto;max-height:calc(100vh - 150px)}
+.qa-empty{color:var(--ink-soft);font-size:13.5px;padding:40px 20px;text-align:center;font-family:"Be Vietnam Pro",system-ui,sans-serif}
+.qa-spin{display:inline-block;width:14px;height:14px;border:2px solid #1b7a43;border-top-color:transparent;border-radius:50%;animation:qasp .7s linear infinite;vertical-align:-2px;margin-right:7px}
 @keyframes qasp{to{transform:rotate(360deg)}}
 .qa-flash{background:#fff7e0 !important;box-shadow:inset 3px 0 0 #f0c25b;transition:background .4s}
-.qa-lock{padding:44px 20px;text-align:center;color:#5c6672;font-size:14px;line-height:1.7;background:#fff;border:1px solid #e4e2da;border-radius:12px}
+.qa-lock{padding:52px 24px;text-align:center;color:var(--ink-soft);font-size:14px;line-height:1.75;background:var(--paper);border:1px solid var(--line);border-radius:14px;max-width:520px;margin:24px auto}
+
 
 </style>
 </head>
@@ -167,7 +176,7 @@
   <button class="stbtn on" id="stTracuu" type="button">📚 Tra cứu văn bản</button>
   <button class="stbtn" id="stHoidap" type="button">💬 Mục hỏi đáp</button>
 </div>
-<div id="viewTracuu">
+<div id="stickyTracuuBar">
 <div class="tabs" id="tabs"></div>
 <div class="wrap"><div class="toolbar">
     <button class="navbtn" id="homeBtn" title="Về đầu văn bản đang mở">⌂ Home</button>
@@ -178,6 +187,8 @@
     <span class="findnav" id="findnav" hidden><button class="navbtn" id="prevHit" title="Kết quả trước">‹</button><span id="hitcount">0/0</span><button class="navbtn" id="nextHit" title="Kết quả sau">›</button></span>
   </div></div>
 </div>
+</div>
+<div id="viewTracuu">
 <main class="wrap">
   <div class="count" id="count"></div>
   <div class="doc" id="doc"></div>
@@ -200,7 +211,7 @@
     <div class="qa-grid">
       <div>
         <div class="qa-card">
-          <h3>Nội dung cần giải đáp</h3>
+          <h3>📝 Nội dung cần giải đáp</h3>
           <div class="qa-seg"><button id="qaMQ" class="on" type="button">Gõ câu hỏi</button><button id="qaMD" type="button">Dán / tải văn bản</button></div>
           <textarea id="qin" placeholder="Nhập câu hỏi, kiến nghị, đề xuất hoặc nội dung cần hướng dẫn/làm rõ…"></textarea>
           <input type="file" id="qaFile" accept=".txt" hidden>
@@ -211,14 +222,14 @@
           <div class="qa-note" id="qaStat"></div>
         </div>
         <div class="qa-card" id="qaCcCard" style="margin-top:14px;display:none">
-          <h3>Căn cứ pháp lý đã trích xuất <span class="qa-note">(bấm để mở điều luật ở tab Tra cứu)</span></h3>
+          <h3>📖 Căn cứ pháp lý đã trích xuất <span class="qa-note">(bấm để mở điều luật ở tab Tra cứu)</span></h3>
           <div id="qaCcList"></div>
         </div>
       </div>
       <div>
         <div class="qa-paperwrap">
-          <div class="qa-paperbar"><span class="t" id="qaPaperT">Văn bản trả lời (mẫu)</span><button class="qa-copy" id="qaCopy" type="button">Sao chép</button></div>
-          <div class="qa-paper" id="qaPaper"><div class="qa-empty">Kết quả hiển thị ở đây dưới dạng công văn trả lời, kèm căn cứ điều–khoản cụ thể.</div></div>
+          <div class="qa-paperbar"><span class="t" id="qaPaperT">📄 Văn bản trả lời</span><button class="qa-copy" id="qaCopy" type="button">📋 Sao chép</button></div>
+          <div class="qa-paper" id="qaPaper"><div class="qa-empty">Kết quả sẽ hiển thị ở đây dưới dạng công văn trả lời, kèm căn cứ điều–khoản cụ thể.</div></div>
         </div>
         <div id="qaWarnBox" style="margin-top:12px"></div>
       </div>
@@ -720,7 +731,7 @@ var o=document.getElementById('__authout');if(o)o.onclick=function(e){e.preventD
     const provs=retrieve(q);
     if(!provs.length){$('qaPaper').innerHTML='';$('qaCcCard').style.display='none';$('qaWarnBox').innerHTML='<div class="qa-banner qa-bad">Không tìm thấy quy định phù hợp trong 12 văn bản. Hãy dùng thuật ngữ pháp lý (tiền sử dụng đất, bồi thường, giá đất cụ thể, thẩm quyền…) hoặc bổ sung văn bản.</div>';return;}
     lastCancu=provs;lastQ=q;
-    $('qaPaperT').textContent='Văn bản trả lời (Lớp 1 – trích dẫn nguyên văn)';
+    $('qaPaperT').textContent='📄 Văn bản trả lời (Lớp 1 – trích dẫn nguyên văn)';
     $('qaPaper').textContent=buildCongVan(q,provs);
     renderCc(provs);
     const nw=provs.filter(p=>p.amend.length).length;
@@ -733,7 +744,7 @@ var o=document.getElementById('__authout');if(o)o.onclick=function(e){e.preventD
     $('qaStat').innerHTML='<span class="qa-spin"></span>Đang nhờ AI diễn đạt (có ghi nhật ký cho quản trị)…';
     fetch('/api/hoidap',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cau_hoi:lastQ,cancu:lastCancu.map(p=>({id:p.id,vb:p.vb,dieu:p.dieu,khoan:p.khoan,text:p.text,amend:amendText(p)}))})})
      .then(async r=>{const d=await r.json();if(!r.ok)throw new Error(d.error||'Lỗi');return d;})
-     .then(d=>{$('qaPaperT').textContent='Văn bản trả lời (Lớp 2 – AI diễn đạt · '+esc(d.model||'')+')';$('qaPaper').textContent=HEAD()+d.cong_van+FOOT;$('qaStat').textContent='';})
+     .then(d=>{$('qaPaperT').textContent='📄 Văn bản trả lời (Lớp 2 – AI diễn đạt · '+esc(d.model||'')+')';$('qaPaper').textContent=HEAD()+d.cong_van+FOOT;$('qaStat').textContent='';})
      .catch(e=>{$('qaStat').innerHTML='<span style="color:#9d2f27">'+esc(e.message)+'</span>';})
      .finally(()=>{$('qaGo2').disabled=false;$('qaGo1').disabled=false;});
   });
