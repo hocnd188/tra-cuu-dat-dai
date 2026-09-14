@@ -215,8 +215,8 @@
           <h3>📝 Nội dung cần giải đáp</h3>
           <div class="qa-seg"><button id="qaMQ" class="on" type="button">Gõ câu hỏi</button><button id="qaMD" type="button">Dán / tải văn bản</button></div>
           <textarea id="qin" placeholder="Nhập câu hỏi, kiến nghị, đề xuất hoặc nội dung cần hướng dẫn/làm rõ…"></textarea>
-          <input type="file" id="qaFile" accept=".txt" hidden>
-          <div id="qaFileRow" class="qa-note" hidden>📎 <a href="#" id="qaPick">Chọn tệp .txt</a> để nạp nội dung (bản chính thức có thể bổ sung .docx/.pdf).</div>
+          <input type="file" id="qaFile" accept=".txt,.doc,.docx,.pdf,.xls,.xlsx" hidden>
+          <div id="qaFileRow" class="qa-note" hidden>📎 <a href="#" id="qaPick">Chọn tệp</a> (.txt, .doc/.docx, .pdf, .xls/.xlsx) để nạp nội dung. <span id="qaFileStat"></span></div>
           <div class="qa-samples" id="qaSamples"></div>
           <button class="qa-go" id="qaGo1" type="button">① Tra cứu căn cứ &amp; soạn công văn (Lớp 1 – không AI)</button>
           <button class="qa-go ai" id="qaGo2" type="button" style="display:none">② Nhờ AI diễn đạt lại (Lớp 2)</button>
@@ -729,9 +729,70 @@ var o=document.getElementById('__authout');if(o)o.onclick=function(e){e.preventD
   }
 
   function setMode(m){$('qaMQ').classList.toggle('on',m==='Q');$('qaMD').classList.toggle('on',m==='D');$('qaFileRow').hidden=(m!=='D');$('qin').placeholder=m==='Q'?'Nhập câu hỏi, kiến nghị, đề xuất hoặc nội dung cần hướng dẫn/làm rõ…':'Dán toàn văn văn bản đến (đơn thư, công văn hỏi…) hoặc tải tệp .txt.';}
-  $('qaMQ').addEventListener('click',()=>setMode('Q'));$('qaMD').addEventListener('click',()=>setMode('D'));
+  $('qaMQ').addEventListener('click',()=>setMode('Q'));$('qaMD').addEventListener('click',()=>{const already=$('qaMD').classList.contains('on');setMode('D');if(!already)$('qaFile').click();});
   $('qaPick').addEventListener('click',e=>{e.preventDefault();$('qaFile').click();});
-  $('qaFile').addEventListener('change',()=>{const f=$('qaFile').files[0];if(!f)return;const r=new FileReader();r.onload=()=>$('qin').value=r.result;r.readAsText(f);});
+  function qaFileStat(msg,isErr){const el=$('qaFileStat');if(el)el.innerHTML=msg?(isErr?'<span style="color:#b3261e">'+esc(msg)+'</span>':esc(msg)):'';}
+  async function qaExtractDocx(file){
+    const mammoth=await window.qaLoadMammoth();
+    const buf=await file.arrayBuffer();
+    const res=await mammoth.extractRawText({arrayBuffer:buf});
+    return (res&&res.value)?res.value.trim():'';
+  }
+  async function qaExtractPdf(file){
+    const pdfjsLib=await window.qaLoadPdfjs();
+    const buf=await file.arrayBuffer();
+    const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+    let out=[];
+    for(let i=1;i<=pdf.numPages;i++){
+      const page=await pdf.getPage(i);
+      const tc=await page.getTextContent();
+      const txt=tc.items.map(it=>it.str).join(' ').trim();
+      if(txt)out.push(txt);
+    }
+    const full=out.join('\n\n').trim();
+    if(!full)throw new Error('PDF không có lớp văn bản (có thể là bản quét/scan) — không trích xuất được chữ. Vui lòng dùng bản .docx/.txt hoặc PDF gốc có thể copy chữ được.');
+    return full;
+  }
+  async function qaExtractXlsx(file){
+    const XLSX=await window.qaLoadXlsx();
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array'});
+    let out=[];
+    wb.SheetNames.forEach(name=>{
+      const ws=wb.Sheets[name];
+      const csv=XLSX.utils.sheet_to_csv(ws,{blankrows:false}).trim();
+      if(csv)out.push('--- Sheet: '+name+' ---\n'+csv);
+    });
+    const full=out.join('\n\n').trim();
+    if(!full)throw new Error('Không đọc được dữ liệu nào trong file Excel.');
+    return full;
+  }
+  function qaExtractTxt(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(new Error('Không đọc được tệp .txt.'));r.readAsText(file);});}
+  $('qaFile').addEventListener('change',async()=>{
+    const f=$('qaFile').files[0];if(!f)return;
+    const ext=(f.name.split('.').pop()||'').toLowerCase();
+    qaFileStat('⏳ Đang đọc tệp "'+f.name+'"…',false);
+    $('qaGo1').disabled=true;$('qaGo2').disabled=true;
+    try{
+      let text;
+      if(ext==='txt')text=await qaExtractTxt(f);
+      else if(ext==='doc'||ext==='docx'){
+        if(ext==='doc')qaFileStat('⏳ Đang đọc tệp .doc (định dạng cũ có thể không đầy đủ, khuyến nghị dùng .docx)…',false);
+        text=await qaExtractDocx(f);
+      }
+      else if(ext==='pdf')text=await qaExtractPdf(f);
+      else if(ext==='xls'||ext==='xlsx')text=await qaExtractXlsx(f);
+      else throw new Error('Định dạng tệp không được hỗ trợ.');
+      if(!text||!text.trim())throw new Error('Không trích xuất được nội dung văn bản từ tệp này.');
+      $('qin').value=text;
+      qaFileStat('✔ Đã nạp nội dung từ "'+f.name+'" ('+text.length.toLocaleString('vi-VN')+' ký tự).',false);
+    }catch(err){
+      qaFileStat('⚠ '+(err&&err.message?err.message:'Lỗi không xác định khi đọc tệp.'),true);
+    }finally{
+      $('qaGo1').disabled=false;$('qaGo2').disabled=false;
+      $('qaFile').value='';
+    }
+  });
   const SAMPLES=['Thẩm quyền quyết định giá đất cụ thể để tính tiền bồi thường hiện nay thuộc cấp nào?','Trình tự, thẩm quyền phê duyệt phương án bồi thường, hỗ trợ, tái định cư?','Hệ số điều chỉnh giá đất do cơ quan nào ban hành và áp dụng khi nào?'];
   $('qaSamples').innerHTML=SAMPLES.map(s=>'<button type="button">'+esc(s)+'</button>').join('');
   Array.prototype.forEach.call($('qaSamples').children,b=>b.addEventListener('click',()=>{setMode('Q');$('qin').value=b.textContent;}));
@@ -795,6 +856,35 @@ var o=document.getElementById('__authout');if(o)o.onclick=function(e){e.preventD
     setTimeout(()=>URL.revokeObjectURL(url),2000);
   });
   setMode('Q');
+})();
+</script>
+
+<!-- Thư viện đọc file cho Mục hỏi đáp (Dán/tải văn bản: .docx/.pdf/.xlsx). Chỉ dùng khi người dùng tải đúng loại file tương ứng, không ảnh hưởng phần còn lại của app. -->
+<script>
+(function(){
+  const LIBS={
+    mammoth:'https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js',
+    pdfjs:'https://cdn.jsdelivr.net/npm/pdfjs-dist@2.16.105/legacy/build/pdf.min.js',
+    pdfjsWorker:'https://cdn.jsdelivr.net/npm/pdfjs-dist@2.16.105/legacy/build/pdf.worker.min.js',
+    xlsx:'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'
+  };
+  const loaded={};
+  function loadScript(url){
+    if(loaded[url])return loaded[url];
+    loaded[url]=new Promise((res,rej)=>{
+      const s=document.createElement('script');
+      s.src=url;s.onload=()=>res();s.onerror=()=>rej(new Error('Không tải được thư viện: '+url));
+      document.head.appendChild(s);
+    });
+    return loaded[url];
+  }
+  window.qaLoadMammoth=async function(){await loadScript(LIBS.mammoth);return window.mammoth;};
+  window.qaLoadPdfjs=async function(){
+    await loadScript(LIBS.pdfjs);
+    if(window.pdfjsLib && window.pdfjsLib.GlobalWorkerOptions)window.pdfjsLib.GlobalWorkerOptions.workerSrc=LIBS.pdfjsWorker;
+    return window.pdfjsLib;
+  };
+  window.qaLoadXlsx=async function(){await loadScript(LIBS.xlsx);return window.XLSX;};
 })();
 </script>
 
