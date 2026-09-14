@@ -832,6 +832,7 @@ var o=document.getElementById('__authout');if(o)o.onclick=function(e){e.preventD
     const nw=provs.filter(p=>p.amend.length).length;
     $('qaWarnBox').innerHTML='<div class="qa-banner qa-ok">✔ Đã lấy '+provs.length+' căn cứ từ 12 văn bản'+(nw?(' · '+nw+' căn cứ có biến động hiệu lực — đã ghi chú'):'')+'. Bản ghép nguyên văn, không suy đoán.</div>';
     if(canAI)$('qaGo2').style.display='';
+    fetch('/api/log-qa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cau_hoi:q,so_can_cu:provs.length})}).catch(()=>{});
   });
   $('qaGo2').addEventListener('click',()=>{
     if(!lastCancu.length){$('qaStat').textContent='Hãy chạy bước ① trước.';return;}

@@ -16,5 +16,13 @@ CREATE TABLE IF NOT EXISTS sessions(
 CREATE TABLE IF NOT EXISTS ai_usage(
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER, username TEXT, ts TEXT NOT NULL,
-  cau_hoi TEXT, model TEXT, ok INTEGER, ghi_chu TEXT
+  cau_hoi TEXT, model TEXT, ok INTEGER, ghi_chu TEXT,
+  layer TEXT NOT NULL DEFAULT 'L2'
 );
+CREATE TABLE IF NOT EXISTS access_log(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER, username TEXT, ts TEXT NOT NULL,
+  ip TEXT, ua TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_ts ON ai_usage(ts);
+CREATE INDEX IF NOT EXISTS idx_access_log_ts ON access_log(ts);

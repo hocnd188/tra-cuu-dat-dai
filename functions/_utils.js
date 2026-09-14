@@ -76,6 +76,14 @@ export async function ensureSchema(env) {
   await env.DB.exec(
     "CREATE TABLE IF NOT EXISTS ai_usage(id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, username TEXT, ts TEXT NOT NULL, cau_hoi TEXT, model TEXT, ok INTEGER, ghi_chu TEXT);"
   );
+  // Cột phân biệt Lớp 1 (không AI) / Lớp 2 (AI) trong cùng bảng nhật ký hỏi đáp
+  try { await env.DB.exec("ALTER TABLE ai_usage ADD COLUMN layer TEXT NOT NULL DEFAULT 'L2';"); } catch (e) {}
+  // Nhật ký truy cập (đăng nhập): ngày giờ, ai, từ đâu — phục vụ theo dõi nội bộ của admin
+  await env.DB.exec(
+    "CREATE TABLE IF NOT EXISTS access_log(id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, username TEXT, ts TEXT NOT NULL, ip TEXT, ua TEXT);"
+  );
+  try { await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_ai_usage_ts ON ai_usage(ts);"); } catch (e) {}
+  try { await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_access_log_ts ON access_log(ts);"); } catch (e) {}
   // Quyền dùng Mục hỏi đáp (can_qa) và quyền dùng AI Lớp 2 (can_ai). Thêm cột nếu chưa có.
   for (const col of ["can_qa", "can_ai"]) {
     try { await env.DB.exec("ALTER TABLE users ADD COLUMN " + col + " INTEGER NOT NULL DEFAULT 0;"); } catch (e) {}
@@ -90,4 +98,25 @@ export async function getPerms(env, userId) {
   const adm = !!(r && r.is_admin);
   // Admin mặc định đủ toàn bộ quyền, không phụ thuộc cột can_qa/can_ai trong DB.
   return { can_qa: adm || !!(r && r.can_qa), can_ai: adm || !!(r && r.can_ai), is_admin: adm };
+}
+
+// Ghi 1 dòng nhật ký truy cập (đăng nhập thành công). Không được để lỗi ghi log làm hỏng luồng đăng nhập chính.
+export async function logAccess(env, request, userId, username) {
+  try {
+    await ensureSchema(env);
+    const ip = request.headers.get("CF-Connecting-IP") || request.headers.get("X-Forwarded-For") || "";
+    const ua = (request.headers.get("User-Agent") || "").slice(0, 200);
+    await env.DB.prepare(
+      "INSERT INTO access_log(user_id,username,ts,ip,ua) VALUES(?,?,?,?,?)"
+    ).bind(userId, username, new Date().toISOString(), ip, ua).run();
+  } catch (e) {}
+}
+
+// Dọn log cũ hơn N ngày (mặc định 90) để tránh phình dung lượng D1. Không throw — chỉ best-effort.
+export async function purgeOldLogs(env, days = 90) {
+  try {
+    const cutoff = new Date(Date.now() - days * 24 * 3600 * 1000).toISOString();
+    await env.DB.prepare("DELETE FROM ai_usage WHERE ts < ?").bind(cutoff).run();
+    await env.DB.prepare("DELETE FROM access_log WHERE ts < ?").bind(cutoff).run();
+  } catch (e) {}
 }
