@@ -60,3 +60,34 @@ export async function getUser(request, env) {
   }
   return { id: row.id, username: row.username, is_admin: !!row.is_admin };
 }
+
+// Tự tạo bảng nếu D1 chưa có (an toàn khi quên chạy schema.sql).
+// Nhờ vậy trang tạo admin luôn hiện ra, không bao giờ kẹt vì thiếu bảng.
+let _schemaReady = false;
+export async function ensureSchema(env) {
+  if (_schemaReady) return;
+  await env.DB.exec(
+    "CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, salt TEXT NOT NULL, hash TEXT NOT NULL, is_admin INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL);"
+  );
+  await env.DB.exec(
+    "CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires_at INTEGER NOT NULL);"
+  );
+  // Nhật ký dùng AI (Lớp 2) để admin theo dõi
+  await env.DB.exec(
+    "CREATE TABLE IF NOT EXISTS ai_usage(id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, username TEXT, ts TEXT NOT NULL, cau_hoi TEXT, model TEXT, ok INTEGER, ghi_chu TEXT);"
+  );
+  // Quyền dùng Mục hỏi đáp (can_qa) và quyền dùng AI Lớp 2 (can_ai). Thêm cột nếu chưa có.
+  for (const col of ["can_qa", "can_ai"]) {
+    try { await env.DB.exec("ALTER TABLE users ADD COLUMN " + col + " INTEGER NOT NULL DEFAULT 0;"); } catch (e) {}
+  }
+  _schemaReady = true;
+}
+
+// Lấy quyền hiệu lực của một user. Admin mặc định có đủ cả hai quyền.
+export async function getPerms(env, userId) {
+  await ensureSchema(env);
+  const r = await env.DB.prepare("SELECT can_qa, can_ai, is_admin FROM users WHERE id = ?").bind(userId).first();
+  const adm = !!(r && r.is_admin);
+  // Admin mặc định đủ toàn bộ quyền, không phụ thuộc cột can_qa/can_ai trong DB.
+  return { can_qa: adm || !!(r && r.can_qa), can_ai: adm || !!(r && r.can_ai), is_admin: adm };
+}
