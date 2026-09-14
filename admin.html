@@ -21,7 +21,7 @@
  .big{font-size:22px;font-weight:800;color:#7a3ca0}
  .warn{background:#f6effa;border:1px solid #e0cdec;border-radius:9px;padding:10px 12px;font-size:13px;color:#5a2b78}
 </style></head><body>
-<header><h1 id="hTitle" style="cursor:default;user-select:none">⚙ Quản trị người dùng</h1><div><a href="/">← Về ứng dụng</a><a href="#" id="lo">Đăng xuất</a></div></header>
+<header><h1>⚙ Quản trị người dùng</h1><div><a href="/">← Về ứng dụng</a><a href="#" id="lo">Đăng xuất</a></div></header>
 <div class="wrap">
  <div class="card"><h2>Thêm người dùng</h2>
    <div class="row">
@@ -44,7 +44,7 @@
    <table style="margin-top:10px"><thead><tr><th>Thời gian</th><th>Người dùng</th><th>Câu hỏi</th><th>KQ</th></tr></thead>
    <tbody id="aitb"><tr><td colspan="4" style="color:#889">Đang tải...</td></tr></tbody></table>
  </div>
- <div class="card" id="sysLog" hidden>
+ <div class="card" id="sysLog">
    <h2>🗂 Nhật ký hệ thống (nội bộ)</h2>
    <div class="row">
      <select id="slKind"><option value="qa">Hỏi đáp (Lớp 1 + Lớp 2)</option><option value="access">Đăng nhập</option></select>
@@ -117,25 +117,8 @@ function resetPw(id,name){const p=prompt("Mật khẩu mới cho "+name+" (≥6 
 document.getElementById("lo").onclick=function(e){e.preventDefault();fetch("/api/logout",{method:"POST"}).then(()=>location.href="/login.html");};
 load();loadAI();
 
-// --- Nhật ký hệ thống (ẩn): bấm 5 lần liên tiếp vào tiêu đề trong vòng 2 giây để hiện ---
+// --- Nhật ký hệ thống: hiển thị sẵn, tự tải khi vào trang, không cần thao tác gì ---
 (function(){
-  let clicks=0, timer=null;
-  document.getElementById("hTitle").addEventListener("click",function(){
-    clicks++;
-    if(timer)clearTimeout(timer);
-    timer=setTimeout(()=>{clicks=0;},2000);
-    if(clicks>=5){
-      clicks=0;clearTimeout(timer);
-      const box=document.getElementById("sysLog");
-      if(box.hidden){
-        box.hidden=false;
-        slState.page=1;slLoad();
-        try{box.scrollIntoView({behavior:"smooth",block:"start"});}catch(e){}
-      }
-      else box.hidden=true;
-    }
-  });
-
   const slState={page:1,pageSize:50};
   window.slState=slState;
 
@@ -195,5 +178,7 @@ load();loadAI();
   document.getElementById("slKind").addEventListener("change",()=>{slState.page=1;slLoad();});
   document.getElementById("slPrev").addEventListener("click",()=>{if(slState.page>1){slState.page--;slLoad();}});
   document.getElementById("slNext").addEventListener("click",()=>{slState.page++;slLoad();});
+
+  slLoad();
 })();
 </script></body></html>
