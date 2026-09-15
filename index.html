@@ -844,12 +844,14 @@ var o=document.getElementById('__authout');if(o)o.onclick=function(e){e.preventD
   $('qaGo2').addEventListener('click',()=>{
     if(!lastCancu.length){$('qaStat').textContent='Hãy chạy bước ① trước.';return;}
     $('qaGo2').disabled=true;$('qaGo1').disabled=true;
-    $('qaStat').innerHTML='<span class="qa-spin"></span>Đang nhờ AI diễn đạt (có ghi nhật ký cho quản trị)…';
-    fetch('/api/hoidap',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cau_hoi:lastQ,cancu:lastCancu.map(p=>({id:p.id,vb:p.vb,dieu:p.dieu,khoan:p.khoan,text:p.text,amend:amendText(p)}))})})
-     .then(async r=>{const d=await r.json();if(!r.ok)throw new Error(d.error||'Lỗi');return d;})
+    $('qaStat').innerHTML='<span class="qa-spin"></span>Đang nhờ AI diễn đạt…';
+    const qaAbort=new AbortController();
+    const qaTimeout=setTimeout(()=>qaAbort.abort(),45000); // 45s: nếu AI không phản hồi kịp, báo lỗi rõ thay vì quay vòng mãi
+    fetch('/api/hoidap',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cau_hoi:lastQ,cancu:lastCancu.map(p=>({id:p.id,vb:p.vb,dieu:p.dieu,khoan:p.khoan,text:p.text,amend:amendText(p)}))}),signal:qaAbort.signal})
+     .then(async r=>{const ct=r.headers.get('content-type')||'';if(!ct.includes('application/json')){throw new Error('Máy chủ phản hồi không đúng định dạng (có thể do lỗi cấu hình hệ thống). Vui lòng báo quản trị viên.');}const d=await r.json();if(!r.ok)throw new Error(d.error||'Lỗi');return d;})
      .then(d=>{$('qaPaperT').textContent='📄 Văn bản trả lời (Lớp 2 – AI diễn đạt · '+esc(d.model||'')+')';$('qaPaper').textContent=HEAD()+d.cong_van+FOOT;$('qaStat').textContent='';})
-     .catch(e=>{$('qaStat').innerHTML='<span style="color:#9d2f27">'+esc(e.message)+'</span>';})
-     .finally(()=>{$('qaGo2').disabled=false;$('qaGo1').disabled=false;});
+     .catch(e=>{const msg=(e&&e.name==='AbortError')?'AI phản hồi quá lâu (quá 45 giây) — có thể hệ thống đang quá tải hoặc gặp sự cố. Vui lòng thử lại sau.':(e.message||'Lỗi không xác định.');$('qaStat').innerHTML='<span style="color:#9d2f27">'+esc(msg)+'</span>';})
+     .finally(()=>{clearTimeout(qaTimeout);$('qaGo2').disabled=false;$('qaGo1').disabled=false;});
   });
   $('qaCopy').addEventListener('click',()=>{const t=$('qaPaper').textContent;if(navigator.clipboard)navigator.clipboard.writeText(t);const b=$('qaCopy'),o=b.textContent;b.textContent='Đã sao chép ✓';setTimeout(()=>b.textContent=o,1400);});
   $('qaDownload').addEventListener('click',()=>{
