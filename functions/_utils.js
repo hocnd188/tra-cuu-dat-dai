@@ -88,6 +88,11 @@ export async function ensureSchema(env) {
   for (const col of ["can_qa", "can_ai"]) {
     try { await env.DB.exec("ALTER TABLE users ADD COLUMN " + col + " INTEGER NOT NULL DEFAULT 0;"); } catch (e) {}
   }
+  // Chặn dò mật khẩu (brute-force): đếm số lần đăng nhập sai liên tiếp theo username.
+  // locked=1 nghĩa là khóa cứng, chỉ admin mở được — không tự hết hạn theo thời gian.
+  await env.DB.exec(
+    "CREATE TABLE IF NOT EXISTS login_attempts(username TEXT PRIMARY KEY, fail_count INTEGER NOT NULL DEFAULT 0, locked INTEGER NOT NULL DEFAULT 0, locked_at TEXT, last_attempt TEXT NOT NULL);"
+  );
   _schemaReady = true;
 }
 
@@ -119,4 +124,65 @@ export async function purgeOldLogs(env, days = 90) {
     await env.DB.prepare("DELETE FROM ai_usage WHERE ts < ?").bind(cutoff).run();
     await env.DB.prepare("DELETE FROM access_log WHERE ts < ?").bind(cutoff).run();
   } catch (e) {}
+}
+
+// ---- Chặn dò mật khẩu (brute-force): khóa CỨNG vĩnh viễn sau 5 lần sai liên tiếp,
+// chỉ admin mở lại được — không tự động hết hạn theo thời gian. ----
+const LOGIN_MAX_FAILS = 5;
+
+function normUser(username) { return String(username || "").toLowerCase(); }
+
+// Kiểm tra tài khoản này có đang bị khóa cứng không. Trả về true/false.
+export async function checkLoginLock(env, username) {
+  try {
+    await ensureSchema(env);
+    const row = await env.DB.prepare("SELECT locked FROM login_attempts WHERE username = ?")
+      .bind(normUser(username)).first();
+    return !!(row && row.locked);
+  } catch (e) { return false; } // lỗi kiểm tra không được phép chặn đăng nhập hợp lệ
+}
+
+// Ghi nhận 1 lần đăng nhập sai. Sau LOGIN_MAX_FAILS lần liên tiếp, khóa CỨNG (locked=1) —
+// giữ nguyên cho tới khi admin chủ động mở, không tự hết hạn.
+export async function recordLoginFailure(env, username) {
+  try {
+    await ensureSchema(env);
+    const key = normUser(username);
+    const row = await env.DB.prepare("SELECT fail_count FROM login_attempts WHERE username = ?").bind(key).first();
+    const nextCount = (row ? Number(row.fail_count) : 0) + 1;
+    const willLock = nextCount >= LOGIN_MAX_FAILS;
+    await env.DB.prepare(
+      "INSERT INTO login_attempts(username,fail_count,locked,locked_at,last_attempt) VALUES(?,?,?,?,?) " +
+      "ON CONFLICT(username) DO UPDATE SET fail_count=excluded.fail_count, " +
+      "locked=CASE WHEN login_attempts.locked=1 THEN 1 ELSE excluded.locked END, " +
+      "locked_at=CASE WHEN login_attempts.locked=1 THEN login_attempts.locked_at ELSE excluded.locked_at END, " +
+      "last_attempt=excluded.last_attempt"
+    ).bind(key, nextCount, willLock ? 1 : 0, willLock ? new Date().toISOString() : null, new Date().toISOString()).run();
+  } catch (e) {}
+}
+
+// Xóa bộ đếm khi đăng nhập đúng — CHỈ áp dụng khi tài khoản chưa bị khóa cứng
+// (nếu đã khóa cứng, đăng nhập không thể thành công nữa nên hàm này sẽ không được gọi tới trong trường hợp đó).
+export async function clearLoginFailures(env, username) {
+  try {
+    await ensureSchema(env);
+    await env.DB.prepare("DELETE FROM login_attempts WHERE username = ?").bind(normUser(username)).run();
+  } catch (e) {}
+}
+
+// Danh sách tài khoản đang bị khóa cứng, để admin xem và mở lại.
+export async function listLockedUsers(env) {
+  try {
+    await ensureSchema(env);
+    const rs = await env.DB.prepare(
+      "SELECT username, fail_count, locked_at FROM login_attempts WHERE locked = 1 ORDER BY locked_at DESC"
+    ).all();
+    return rs.results || [];
+  } catch (e) { return []; }
+}
+
+// Admin mở khóa cho 1 tài khoản — xóa hẳn bản ghi để lần đăng nhập tiếp theo tính lại từ đầu.
+export async function adminUnlockUser(env, username) {
+  await ensureSchema(env);
+  await env.DB.prepare("DELETE FROM login_attempts WHERE username = ?").bind(normUser(username)).run();
 }
