@@ -26,6 +26,10 @@
   .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:16px auto}
   .search{flex:1 1 220px;display:flex;align-items:center;gap:8px;background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);padding:9px 12px}
   .search input{border:0;outline:0;flex:1;font:inherit;font-size:14px;background:transparent;color:var(--ink)}
+  .micbtn{flex:none;border:0;background:transparent;color:#5a6472;padding:2px;cursor:pointer;border-radius:6px;display:flex;align-items:center;justify-content:center;-webkit-user-select:none;user-select:none;touch-action:manipulation}
+  .micbtn:hover{background:#eef1f4}
+  .micbtn.rec{color:#fff;background:#c0392b;animation:micpulse 1.1s ease-in-out infinite}
+  @keyframes micpulse{0%,100%{box-shadow:0 0 0 0 rgba(192,57,43,.5)}50%{box-shadow:0 0 0 6px rgba(192,57,43,0)}}
   .toggle{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-soft);background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);padding:9px 12px;cursor:pointer;user-select:none}
   .toggle input{accent-color:var(--primary);width:15px;height:15px}
   .count{font-size:12.5px;color:var(--ink-soft);text-align:center;margin-bottom:12px}
@@ -184,7 +188,10 @@
     <button class="navbtn" id="backBtn" title="Về vị trí cuộn gần nhất">↩ Back</button>
     <button class="navbtn" id="endBtn" title="Về cuối văn bản đang mở">⌄ End</button>
     <label class="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5a6472" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-      <input id="q" type="search" placeholder="Tìm trong nội dung điều khoản…" autocomplete="off" name="dieu-khoan-search" data-lpignore="true" data-1p-ignore></label>
+      <input id="q" type="search" placeholder="Tìm trong nội dung điều khoản…" autocomplete="off" name="dieu-khoan-search" data-lpignore="true" data-1p-ignore>
+      <button type="button" id="micBtn" class="micbtn" title="Giữ để nói tìm kiếm" hidden>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+      </button></label>
     <span class="findnav" id="findnav" hidden><button class="navbtn" id="prevHit" title="Kết quả trước">‹</button><span id="hitcount">0/0</span><button class="navbtn" id="nextHit" title="Kết quả sau">›</button></span>
   </div></div>
 </div>
@@ -886,6 +893,71 @@ var o=document.getElementById('__authout');if(o)o.onclick=function(e){e.preventD
     return window.pdfjsLib;
   };
   window.qaLoadXlsx=async function(){await loadScript(LIBS.xlsx);return window.XLSX;};
+})();
+</script>
+
+<!-- Tìm kiếm bằng giọng nói (tab Tra cứu văn bản): bấm giữ micro để nói, nhả ra để dừng.
+     Độc lập hoàn toàn với các script khác — chỉ chạm vào #q (input tìm kiếm) và #micBtn. -->
+<script>
+(function(){
+  const micBtn = document.getElementById('micBtn');
+  const qInput = document.getElementById('q');
+  if (!micBtn || !qInput) return;
+
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return; // Trình duyệt không hỗ trợ (vd Firefox desktop) — giữ nút ẩn, không báo lỗi.
+
+  micBtn.hidden = false;
+
+  let recognition = null;
+  let isRecording = false;
+  let baseText = ''; // nội dung đã có trong ô trước khi bắt đầu nói, để nối thêm chứ không xóa mất
+
+  function setInputValue(text){
+    qInput.value = text;
+    qInput.dispatchEvent(new Event('input', { bubbles: true })); // kích hoạt render() có sẵn, giống gõ tay
+  }
+
+  function startRecording(){
+    if (isRecording) return;
+    try {
+      recognition = new SR();
+      recognition.lang = 'vi-VN';
+      recognition.interimResults = true;
+      recognition.continuous = true;
+      baseText = qInput.value ? (qInput.value.trim() + ' ') : '';
+
+      recognition.onresult = function(e){
+        let transcript = '';
+        for (let i = 0; i < e.results.length; i++) transcript += e.results[i][0].transcript;
+        setInputValue((baseText + transcript).trim());
+      };
+      recognition.onerror = function(){ stopRecording(); };
+      recognition.onend = function(){ stopRecording(); };
+
+      recognition.start();
+      isRecording = true;
+      micBtn.classList.add('rec');
+    } catch (e) { stopRecording(); }
+  }
+
+  function stopRecording(){
+    if (recognition) { try { recognition.stop(); } catch(e) {} }
+    recognition = null;
+    isRecording = false;
+    micBtn.classList.remove('rec');
+  }
+
+  // Bấm giữ để nói — hỗ trợ cả chuột (desktop) và chạm (điện thoại)
+  micBtn.addEventListener('mousedown', (e)=>{ e.preventDefault(); startRecording(); });
+  micBtn.addEventListener('touchstart', (e)=>{ e.preventDefault(); startRecording(); }, { passive:false });
+
+  ['mouseup','mouseleave','touchend','touchcancel'].forEach(evt=>{
+    micBtn.addEventListener(evt, (e)=>{ e.preventDefault(); stopRecording(); });
+  });
+
+  // Nếu người dùng chuyển tab trình duyệt hoặc rời trang trong lúc đang ghi âm, dừng lại để tránh treo mic.
+  document.addEventListener('visibilitychange', ()=>{ if (document.hidden) stopRecording(); });
 })();
 </script>
 
