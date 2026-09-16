@@ -31,10 +31,10 @@ export async function onRequestGet({ request, env, waitUntil }) {
   if (pageSize > 200) pageSize = 200;
   const offset = (page - 1) * pageSize;
 
-  const table = kind === "access" ? "access_log" : "ai_usage";
+  const table = kind === "access" ? "access_log" : (kind === "debug" ? "debug_errors" : "ai_usage");
   const where = [];
   const binds = [];
-  if (userFilter) { where.push("LOWER(username) LIKE ?"); binds.push("%" + userFilter.toLowerCase() + "%"); }
+  if (userFilter && kind !== "debug") { where.push("LOWER(username) LIKE ?"); binds.push("%" + userFilter.toLowerCase() + "%"); }
   if (from) { where.push("ts >= ?"); binds.push(from + "T00:00:00.000Z"); }
   if (to) { where.push("ts <= ?"); binds.push(to + "T23:59:59.999Z"); }
   if (kind === "qa" && qKw) { where.push("LOWER(cau_hoi) LIKE ?"); binds.push("%" + qKw.toLowerCase() + "%"); }
@@ -43,7 +43,7 @@ export async function onRequestGet({ request, env, waitUntil }) {
 
   const cols = kind === "access"
     ? "id, user_id, username, ts, ip, ua"
-    : "id, user_id, username, ts, cau_hoi, model, ok, layer";
+    : (kind === "debug" ? "id, ts, noi_dung, chi_tiet" : "id, user_id, username, ts, cau_hoi, model, ok, layer");
 
   const countRow = await env.DB.prepare(`SELECT COUNT(*) AS n FROM ${table} ${whereSql}`).bind(...binds).first();
   const total = (countRow && countRow.n) || 0;
@@ -56,11 +56,13 @@ export async function onRequestGet({ request, env, waitUntil }) {
   const today = new Date().toISOString().slice(0, 10);
   const todayAccess = await env.DB.prepare("SELECT COUNT(*) AS n FROM access_log WHERE substr(ts,1,10) = ?").bind(today).first();
   const todayQa = await env.DB.prepare("SELECT COUNT(*) AS n FROM ai_usage WHERE substr(ts,1,10) = ?").bind(today).first();
+  const todayErr = await env.DB.prepare("SELECT COUNT(*) AS n FROM debug_errors WHERE substr(ts,1,10) = ?").bind(today).first();
 
   return json({
     kind, page, page_size: pageSize, total,
     rows: rs.results || [],
     today_access: (todayAccess && todayAccess.n) || 0,
     today_qa: (todayQa && todayQa.n) || 0,
+    today_err: (todayErr && todayErr.n) || 0,
   });
 }

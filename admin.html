@@ -2,12 +2,14 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Quản trị người dùng</title>
 <style>
- body{margin:0;font-family:system-ui,Arial;background:#eef2f5;color:#25313f}
- header{background:#1b7a43;color:#fff;padding:14px 18px;display:flex;justify-content:space-between;align-items:center}
+ body{margin:0;font-family:system-ui,Arial;background:#eef2f5;color:#25313f;height:100vh;overflow:hidden;display:flex;flex-direction:column}
+ header{background:#1b7a43;color:#fff;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;flex:none}
  header h1{font-size:16px;margin:0}header a{color:#fff;font-size:13px;text-decoration:none;margin-left:14px}
+ #fixedTop{flex:none}
+ #scrollArea{flex:1 1 auto;overflow-y:auto}
  .wrap{max-width:900px;margin:18px auto;padding:0 14px}
  .card{background:#fff;border:1px solid #dfe5ea;border-radius:12px;padding:16px;margin-bottom:16px}
- h2{font-size:15px;margin:0 0 12px}
+ h2{font-size:15px;margin:0 0 12px;display:flex;align-items:center;justify-content:space-between;gap:8px}
  table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;padding:9px 8px;border-bottom:1px solid #eef1f4}
  th{font-size:12px;color:#657;text-transform:uppercase}
  .tag{font-size:11px;padding:2px 8px;border-radius:10px;background:#e7f5ec;color:#1b7a43;font-weight:700}
@@ -20,10 +22,17 @@
  .chk{display:flex;gap:5px;align-items:center;font-size:13px}
  .big{font-size:22px;font-weight:800;color:#7a3ca0}
  .warn{background:#f6effa;border:1px solid #e0cdec;border-radius:9px;padding:10px 12px;font-size:13px;color:#5a2b78}
+ .collapseBtn{flex:none;border:1px solid #cfd6dd;background:#f4f6f8;color:#25313f;width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:transform .15s}
+ .collapseBtn.closed{transform:rotate(-90deg)}
+ .scrollTable5{max-height:230px;overflow-y:auto}
+ .scrollTable10{max-height:420px;overflow-y:auto}
+ .scrollTable5 table,.scrollTable10 table{margin:0}
+ .scrollTable5 thead th,.scrollTable10 thead th{position:sticky;top:0;background:#fff;z-index:1}
 </style></head><body>
+<div id="fixedTop">
 <header><h1>⚙ Quản trị người dùng</h1><div><a href="/">← Về ứng dụng</a><a href="#" id="lo">Đăng xuất</a></div></header>
-<div class="wrap">
- <div class="card"><h2>Thêm người dùng</h2>
+<div class="wrap" style="margin-bottom:0">
+ <div class="card" style="margin-bottom:12px"><h2><span>Thêm người dùng</span></h2>
    <div class="row">
      <input id="nu" placeholder="Tên đăng nhập">
      <input id="np" type="password" placeholder="Mật khẩu (≥6 ký tự)">
@@ -33,25 +42,31 @@
      <button id="add">Thêm</button>
    </div><div class="msg" id="m1"></div>
  </div>
- <div class="card" id="lockedCard" style="display:none">
-   <h2>🔒 Tài khoản bị khóa do nhập sai mật khẩu</h2>
+ <div class="card" id="lockedCard" style="display:none;margin-bottom:0">
+   <h2><span>🔒 Tài khoản bị khóa do nhập sai mật khẩu</span></h2>
    <table><thead><tr><th>Tên đăng nhập</th><th>Số lần sai</th><th>Thời điểm khóa</th><th></th></tr></thead>
    <tbody id="lockedTb"></tbody></table>
    <div class="msg" id="lockedMsg"></div>
  </div>
- <div class="card"><h2>Danh sách người dùng — cấp quyền</h2>
+</div>
+</div>
+<div id="scrollArea">
+<div class="wrap" style="margin-top:12px">
+ <div class="card"><h2><span>Danh sách người dùng — cấp quyền</span><button class="collapseBtn" id="tbToggle" title="Thu gọn/mở rộng">▾</button></h2>
+   <div class="scrollTable5" id="tbScroll">
    <table><thead><tr><th>ID</th><th>Tên</th><th>Vai trò</th><th>Hỏi đáp</th><th>Dùng AI</th><th>Tạo</th><th></th></tr></thead>
    <tbody id="tb"><tr><td colspan="7" style="color:#889">Đang tải...</td></tr></tbody></table>
+   </div>
    <div class="msg" id="m2"></div>
    <div class="msg" style="color:#789">Admin luôn có sẵn cả hai quyền. Tích/bỏ tích để cấp hoặc thu hồi quyền cho người dùng thường (lưu ngay).</div>
  </div>
- <div class="card"><h2>Nhật ký dùng AI (Lớp 2)</h2>
+ <div class="card"><h2><span>Nhật ký dùng AI (Lớp 2)</span></h2>
    <div class="warn">Hôm nay đã dùng AI: <span class="big" id="aiToday">–</span> lượt. Mỗi lượt tiêu tốn hạn mức Workers AI (miễn phí ~15–25 lượt/ngày, sau đó tính phí rất nhỏ).</div>
    <table style="margin-top:10px"><thead><tr><th>Thời gian</th><th>Người dùng</th><th>Câu hỏi</th><th>KQ</th></tr></thead>
    <tbody id="aitb"><tr><td colspan="4" style="color:#889">Đang tải...</td></tr></tbody></table>
  </div>
  <div class="card" id="sysLog">
-   <h2>🗂 Nhật ký hệ thống (nội bộ)</h2>
+   <h2><span>🗂 Nhật ký hệ thống (nội bộ)</span></h2>
    <div class="row">
      <select id="slKind"><option value="qa">Hỏi đáp (Lớp 1 + Lớp 2)</option><option value="access">Đăng nhập</option><option value="debug">Lỗi hệ thống (debug)</option></select>
      <select id="slLayer"><option value="">Mọi lớp</option><option value="L1">Chỉ Lớp 1</option><option value="L2">Chỉ Lớp 2</option></select>
@@ -63,7 +78,9 @@
      <button class="sec" id="slReset">Xóa lọc</button>
    </div>
    <div class="msg" id="slMsg" style="color:#789">Hôm nay: <b id="slToday"></b></div>
+   <div class="scrollTable10" id="slScroll">
    <table style="margin-top:6px"><thead id="slHead"></thead><tbody id="sltb"><tr><td style="color:#889">Đang tải...</td></tr></tbody></table>
+   </div>
    <div class="row" style="margin-top:8px;justify-content:space-between">
      <span class="msg" id="slPageInfo" style="margin:0"></span>
      <div class="row" style="gap:6px">
@@ -72,6 +89,7 @@
      </div>
    </div>
  </div>
+</div>
 </div>
 <script>
 function esc(s){return String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
@@ -224,5 +242,16 @@ load();loadAI();loadLocked();
   document.getElementById("slNext").addEventListener("click",()=>{slState.page++;slLoad();});
 
   slLoad();
+})();
+
+// --- Thu gọn/mở rộng khối "Danh sách người dùng — cấp quyền" ---
+(function(){
+  const btn=document.getElementById("tbToggle");
+  const box=document.getElementById("tbScroll");
+  btn.addEventListener("click",function(){
+    const closed=box.style.display==="none";
+    box.style.display=closed?"":"none";
+    btn.classList.toggle("closed",!closed);
+  });
 })();
 </script></body></html>

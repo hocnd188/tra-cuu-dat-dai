@@ -93,6 +93,11 @@ export async function ensureSchema(env) {
   await env.DB.exec(
     "CREATE TABLE IF NOT EXISTS login_attempts(username TEXT PRIMARY KEY, fail_count INTEGER NOT NULL DEFAULT 0, locked INTEGER NOT NULL DEFAULT 0, locked_at TEXT, last_attempt TEXT NOT NULL);"
   );
+  // Bảng ghi lại lỗi ghi log (nếu có) để admin tự chẩn đoán — không ảnh hưởng chức năng chính,
+  // chỉ phục vụ debug khi access_log/ai_usage bị thiếu dòng một cách khó hiểu.
+  await env.DB.exec(
+    "CREATE TABLE IF NOT EXISTS debug_errors(id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, noi_dung TEXT, chi_tiet TEXT);"
+  );
   _schemaReady = true;
 }
 
@@ -114,7 +119,12 @@ export async function logAccess(env, request, userId, username) {
     await env.DB.prepare(
       "INSERT INTO access_log(user_id,username,ts,ip,ua) VALUES(?,?,?,?,?)"
     ).bind(userId, username, new Date().toISOString(), ip, ua).run();
-  } catch (e) {}
+  } catch (e) {
+    try {
+      await env.DB.prepare("INSERT INTO debug_errors(ts,noi_dung,chi_tiet) VALUES(?,?,?)")
+        .bind(new Date().toISOString(), "logAccess thất bại cho user_id=" + userId + " username=" + username, String(e && e.message || e)).run();
+    } catch (e2) {}
+  }
 }
 
 // Dọn log cũ hơn N ngày (mặc định 90) để tránh phình dung lượng D1. Không throw — chỉ best-effort.
