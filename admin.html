@@ -53,7 +53,7 @@
  <div class="card" id="sysLog">
    <h2>🗂 Nhật ký hệ thống (nội bộ)</h2>
    <div class="row">
-     <select id="slKind"><option value="qa">Hỏi đáp (Lớp 1 + Lớp 2)</option><option value="access">Đăng nhập</option></select>
+     <select id="slKind"><option value="qa">Hỏi đáp (Lớp 1 + Lớp 2)</option><option value="access">Đăng nhập</option><option value="debug">Lỗi hệ thống (debug)</option></select>
      <select id="slLayer"><option value="">Mọi lớp</option><option value="L1">Chỉ Lớp 1</option><option value="L2">Chỉ Lớp 2</option></select>
      <input id="slUser" placeholder="Lọc theo tên đăng nhập">
      <input id="slFrom" type="date">
@@ -161,15 +161,20 @@ load();loadAI();loadLocked();
   }
 
   function slHeadRow(kind){
-    return kind==="access"
-      ? "<tr><th>Thời gian</th><th>Người dùng</th><th>IP</th><th>Thiết bị</th></tr>"
-      : "<tr><th>Thời gian</th><th>Lớp</th><th>Người dùng</th><th>Nội dung hỏi/đáp</th><th>KQ</th></tr>";
+    if(kind==="access")return "<tr><th>Thời gian</th><th>Người dùng</th><th>IP</th><th>Thiết bị</th></tr>";
+    if(kind==="debug")return "<tr><th>Thời gian</th><th>Nội dung lỗi</th><th>Chi tiết</th></tr>";
+    return "<tr><th>Thời gian</th><th>Lớp</th><th>Người dùng</th><th>Nội dung hỏi/đáp</th><th>KQ</th></tr>";
   }
   function slRowHtml(kind,x){
     if(kind==="access"){
       return "<tr><td style='font-size:12px;white-space:nowrap'>"+esc(fmtVN(x.ts))+"</td>"
         +"<td>"+esc(x.username)+"</td><td style='font-size:12px'>"+esc(x.ip||"")+"</td>"
         +"<td style='font-size:11.5px;color:#678;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'>"+esc(x.ua||"")+"</td></tr>";
+    }
+    if(kind==="debug"){
+      return "<tr><td style='font-size:12px;white-space:nowrap'>"+esc(fmtVN(x.ts))+"</td>"
+        +"<td style='font-size:12.5px;color:#9d2f27'>"+esc(x.noi_dung||"")+"</td>"
+        +"<td style='font-size:11.5px;color:#678;white-space:pre-wrap'>"+esc(x.chi_tiet||"")+"</td></tr>";
     }
     const layerTag="<span class='tag' style='"+(x.layer==="L2"?"background:#efe6fb;color:#6a3ca8":"")+"'>"+esc(x.layer||"L1")+"</span>";
     return "<tr><td style='font-size:12px;white-space:nowrap'>"+esc(fmtVN(x.ts))+"</td>"
@@ -196,7 +201,8 @@ load();loadAI();loadLocked();
     fetch("/api/system-log?"+params.toString())
       .then(async r=>{const d=await r.json();if(!r.ok)throw new Error(d.error||"Lỗi");return d;})
       .then(d=>{
-        document.getElementById("slToday").textContent="đăng nhập "+d.today_access+" lượt · hỏi đáp "+d.today_qa+" lượt";
+        const errPart=(d.today_err>0)?(" · <span style='color:#9d2f27'>lỗi hệ thống "+d.today_err+"</span>"):"";
+        document.getElementById("slToday").innerHTML="đăng nhập "+d.today_access+" lượt · hỏi đáp "+d.today_qa+" lượt"+errPart;
         const rows=d.rows||[];
         document.getElementById("sltb").innerHTML=rows.map(x=>slRowHtml(kind,x)).join("")
           ||"<tr><td style='color:#889'>Không có dữ liệu phù hợp.</td></tr>";

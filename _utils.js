@@ -76,10 +76,28 @@ export async function ensureSchema(env) {
   await env.DB.exec(
     "CREATE TABLE IF NOT EXISTS ai_usage(id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, username TEXT, ts TEXT NOT NULL, cau_hoi TEXT, model TEXT, ok INTEGER, ghi_chu TEXT);"
   );
+  // Cột phân biệt Lớp 1 (không AI) / Lớp 2 (AI) trong cùng bảng nhật ký hỏi đáp
+  try { await env.DB.exec("ALTER TABLE ai_usage ADD COLUMN layer TEXT NOT NULL DEFAULT 'L2';"); } catch (e) {}
+  // Nhật ký truy cập (đăng nhập): ngày giờ, ai, từ đâu — phục vụ theo dõi nội bộ của admin
+  await env.DB.exec(
+    "CREATE TABLE IF NOT EXISTS access_log(id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, username TEXT, ts TEXT NOT NULL, ip TEXT, ua TEXT);"
+  );
+  try { await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_ai_usage_ts ON ai_usage(ts);"); } catch (e) {}
+  try { await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_access_log_ts ON access_log(ts);"); } catch (e) {}
   // Quyền dùng Mục hỏi đáp (can_qa) và quyền dùng AI Lớp 2 (can_ai). Thêm cột nếu chưa có.
   for (const col of ["can_qa", "can_ai"]) {
     try { await env.DB.exec("ALTER TABLE users ADD COLUMN " + col + " INTEGER NOT NULL DEFAULT 0;"); } catch (e) {}
   }
+  // Chặn dò mật khẩu (brute-force): đếm số lần đăng nhập sai liên tiếp theo username.
+  // locked=1 nghĩa là khóa cứng, chỉ admin mở được — không tự hết hạn theo thời gian.
+  await env.DB.exec(
+    "CREATE TABLE IF NOT EXISTS login_attempts(username TEXT PRIMARY KEY, fail_count INTEGER NOT NULL DEFAULT 0, locked INTEGER NOT NULL DEFAULT 0, locked_at TEXT, last_attempt TEXT NOT NULL);"
+  );
+  // Bảng ghi lại lỗi ghi log (nếu có) để admin tự chẩn đoán — không ảnh hưởng chức năng chính,
+  // chỉ phục vụ debug khi access_log/ai_usage bị thiếu dòng một cách khó hiểu.
+  await env.DB.exec(
+    "CREATE TABLE IF NOT EXISTS debug_errors(id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, noi_dung TEXT, chi_tiet TEXT);"
+  );
   _schemaReady = true;
 }
 
@@ -90,4 +108,91 @@ export async function getPerms(env, userId) {
   const adm = !!(r && r.is_admin);
   // Admin mặc định đủ toàn bộ quyền, không phụ thuộc cột can_qa/can_ai trong DB.
   return { can_qa: adm || !!(r && r.can_qa), can_ai: adm || !!(r && r.can_ai), is_admin: adm };
+}
+
+// Ghi 1 dòng nhật ký truy cập (đăng nhập thành công). Không được để lỗi ghi log làm hỏng luồng đăng nhập chính.
+export async function logAccess(env, request, userId, username) {
+  try {
+    await ensureSchema(env);
+    const ip = request.headers.get("CF-Connecting-IP") || request.headers.get("X-Forwarded-For") || "";
+    const ua = (request.headers.get("User-Agent") || "").slice(0, 200);
+    await env.DB.prepare(
+      "INSERT INTO access_log(user_id,username,ts,ip,ua) VALUES(?,?,?,?,?)"
+    ).bind(userId, username, new Date().toISOString(), ip, ua).run();
+  } catch (e) {
+    try {
+      await env.DB.prepare("INSERT INTO debug_errors(ts,noi_dung,chi_tiet) VALUES(?,?,?)")
+        .bind(new Date().toISOString(), "logAccess thất bại cho user_id=" + userId + " username=" + username, String(e && e.message || e)).run();
+    } catch (e2) {}
+  }
+}
+
+// Dọn log cũ hơn N ngày (mặc định 90) để tránh phình dung lượng D1. Không throw — chỉ best-effort.
+export async function purgeOldLogs(env, days = 90) {
+  try {
+    const cutoff = new Date(Date.now() - days * 24 * 3600 * 1000).toISOString();
+    await env.DB.prepare("DELETE FROM ai_usage WHERE ts < ?").bind(cutoff).run();
+    await env.DB.prepare("DELETE FROM access_log WHERE ts < ?").bind(cutoff).run();
+  } catch (e) {}
+}
+
+// ---- Chặn dò mật khẩu (brute-force): khóa CỨNG vĩnh viễn sau 5 lần sai liên tiếp,
+// chỉ admin mở lại được — không tự động hết hạn theo thời gian. ----
+const LOGIN_MAX_FAILS = 5;
+
+function normUser(username) { return String(username || "").toLowerCase(); }
+
+// Kiểm tra tài khoản này có đang bị khóa cứng không. Trả về true/false.
+export async function checkLoginLock(env, username) {
+  try {
+    await ensureSchema(env);
+    const row = await env.DB.prepare("SELECT locked FROM login_attempts WHERE username = ?")
+      .bind(normUser(username)).first();
+    return !!(row && row.locked);
+  } catch (e) { return false; } // lỗi kiểm tra không được phép chặn đăng nhập hợp lệ
+}
+
+// Ghi nhận 1 lần đăng nhập sai. Sau LOGIN_MAX_FAILS lần liên tiếp, khóa CỨNG (locked=1) —
+// giữ nguyên cho tới khi admin chủ động mở, không tự hết hạn.
+export async function recordLoginFailure(env, username) {
+  try {
+    await ensureSchema(env);
+    const key = normUser(username);
+    const row = await env.DB.prepare("SELECT fail_count FROM login_attempts WHERE username = ?").bind(key).first();
+    const nextCount = (row ? Number(row.fail_count) : 0) + 1;
+    const willLock = nextCount >= LOGIN_MAX_FAILS;
+    await env.DB.prepare(
+      "INSERT INTO login_attempts(username,fail_count,locked,locked_at,last_attempt) VALUES(?,?,?,?,?) " +
+      "ON CONFLICT(username) DO UPDATE SET fail_count=excluded.fail_count, " +
+      "locked=CASE WHEN login_attempts.locked=1 THEN 1 ELSE excluded.locked END, " +
+      "locked_at=CASE WHEN login_attempts.locked=1 THEN login_attempts.locked_at ELSE excluded.locked_at END, " +
+      "last_attempt=excluded.last_attempt"
+    ).bind(key, nextCount, willLock ? 1 : 0, willLock ? new Date().toISOString() : null, new Date().toISOString()).run();
+  } catch (e) {}
+}
+
+// Xóa bộ đếm khi đăng nhập đúng — CHỈ áp dụng khi tài khoản chưa bị khóa cứng
+// (nếu đã khóa cứng, đăng nhập không thể thành công nữa nên hàm này sẽ không được gọi tới trong trường hợp đó).
+export async function clearLoginFailures(env, username) {
+  try {
+    await ensureSchema(env);
+    await env.DB.prepare("DELETE FROM login_attempts WHERE username = ?").bind(normUser(username)).run();
+  } catch (e) {}
+}
+
+// Danh sách tài khoản đang bị khóa cứng, để admin xem và mở lại.
+export async function listLockedUsers(env) {
+  try {
+    await ensureSchema(env);
+    const rs = await env.DB.prepare(
+      "SELECT username, fail_count, locked_at FROM login_attempts WHERE locked = 1 ORDER BY locked_at DESC"
+    ).all();
+    return rs.results || [];
+  } catch (e) { return []; }
+}
+
+// Admin mở khóa cho 1 tài khoản — xóa hẳn bản ghi để lần đăng nhập tiếp theo tính lại từ đầu.
+export async function adminUnlockUser(env, username) {
+  await ensureSchema(env);
+  await env.DB.prepare("DELETE FROM login_attempts WHERE username = ?").bind(normUser(username)).run();
 }

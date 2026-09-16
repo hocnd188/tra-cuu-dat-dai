@@ -1,4 +1,4 @@
-import { json, getUser, getPerms, ensureSchema } from "../_utils.js";
+import { json, getUser, getPerms, ensureSchema, purgeOldLogs } from "../_utils.js";
 
 const SYS = `Bạn là trợ lý pháp chế về PHÁP LUẬT ĐẤT ĐAI Việt Nam, soạn phần nội dung trả lời cho cơ quan nhà nước.
 NGUYÊN TẮC BẮT BUỘC:
@@ -9,7 +9,7 @@ NGUYÊN TẮC BẮT BUỘC:
 5. Văn phong hành chính, trung tính, chính xác.
 Hãy viết phần nội dung trả lời (không cần quốc hiệu/tiêu ngữ, hệ thống tự thêm), gồm: nêu tóm tắt nội dung hỏi; "Về vấn đề này, căn cứ quy định pháp luật đất đai hiện hành, … có ý kiến như sau:"; liệt kê từng căn cứ kèm trả lời; cảnh báo hiệu lực nếu có; câu kết đề nghị thực hiện. Kết thúc bằng dòng: "(Bản thảo do hệ thống hỗ trợ soạn — cần chuyên viên rà soát trước khi ban hành.)"`;
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env, waitUntil }) {
   await ensureSchema(env);
   const u = await getUser(request, env);
   if (!u) return json({ error: "unauthorized" }, 401);
@@ -38,12 +38,20 @@ export async function onRequestPost({ request, env }) {
     if (!ok) err = "empty response";
   } catch (e) { err = String(e && e.message || e).slice(0, 200); }
 
-  // Ghi nhật ký để admin theo dõi (kể cả khi lỗi)
-  try {
-    await env.DB.prepare(
-      "INSERT INTO ai_usage(user_id,username,ts,cau_hoi,model,ok,ghi_chu) VALUES(?,?,?,?,?,?,?)"
-    ).bind(u.id, u.username, new Date().toISOString(), String(cau_hoi).slice(0, 300), model, ok, err).run();
-  } catch (e) {}
+  // Ghi nhật ký để admin theo dõi (kể cả khi lỗi) — chạy nền (waitUntil), không chặn phản hồi cho user
+  const logTask = (async () => {
+    try {
+      await env.DB.prepare(
+        "INSERT INTO ai_usage(user_id,username,ts,cau_hoi,model,ok,ghi_chu,layer) VALUES(?,?,?,?,?,?,?,?)"
+      ).bind(u.id, u.username, new Date().toISOString(), String(cau_hoi), model, ok, err, "L2").run();
+    } catch (e) {}
+  })();
+  if (typeof waitUntil === "function") {
+    waitUntil(logTask);
+    waitUntil(purgeOldLogs(env, 90));
+  } else {
+    await logTask;
+  }
 
   if (!ok) return json({ error: "AI không phản hồi (" + err + "). Thử lại sau." }, 502);
   return json({ cong_van: out, model });
