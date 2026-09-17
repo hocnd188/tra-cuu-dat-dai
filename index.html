@@ -576,11 +576,25 @@ function doSeek(bar){
   const a=getMus();const dur=isFinite(a.duration)?a.duration:0;
   if(!dur)return;
   const targetTime=(parseFloat(bar.value)/1000)*dur;
-  try{a.currentTime=targetTime;}catch(e){}
+  const wasPaused=a.paused; // ghi nhớ ĐÚNG trạng thái hiện tại để khôi phục lại, không tự ý đổi phát/dừng
+  try{
+    a.currentTime=targetTime;
+    // Một số trình duyệt/định dạng (đặc biệt .ogg mã hoá Variable Bitrate) chỉ cập nhật ĐÚNG số hiển thị
+    // của currentTime nhưng KHÔNG thực sự đồng bộ lại luồng giải mã âm thanh tới đúng vị trí mới, khiến
+    // tiếng phát ra vẫn là đoạn cũ dù đồng hồ đã nhảy. Gọi lại play() ngay sau khi set currentTime ép trình
+    // duyệt tái đồng bộ đúng vị trí giải mã — nếu trước đó đang tạm dừng, play xong sẽ pause lại ngay tại
+    // đúng vị trí mới (không quay về đầu, không tự ý tiếp tục phát nếu người dùng đang để tạm dừng).
+    const pr=a.play();
+    if(pr&&pr.then){
+      pr.then(()=>{ if(wasPaused)a.pause(); }).catch(()=>{});
+    }else if(wasPaused){
+      a.pause();
+    }
+  }catch(e){}
   // Trình duyệt cũ/lạ có thể không bắn "seeking" (hiếm) — đặt thời hạn an toàn 600ms để tự mở khóa,
   // tránh kẹt vĩnh viễn nếu "seeked" vì lý do nào đó không bao giờ đến.
   clearTimeout(bar._seekSafety);
-  bar._seekSafety=setTimeout(()=>{bar._dragging=false;updateSeekUI();},600);
+  bar._seekSafety=setTimeout(()=>{bar._dragging=false;updateSeekUI();renderFun();},600);
 }
 let _seekDebounce=null;
 $("funPanel").addEventListener("input",(e)=>{
