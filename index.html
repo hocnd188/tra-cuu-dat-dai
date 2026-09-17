@@ -577,24 +577,64 @@ function doSeek(bar){
   if(!dur)return;
   const targetTime=(parseFloat(bar.value)/1000)*dur;
   const wasPaused=a.paused; // ghi nhớ ĐÚNG trạng thái hiện tại để khôi phục lại, không tự ý đổi phát/dừng
-  try{
-    a.currentTime=targetTime;
-    // Một số trình duyệt/định dạng (đặc biệt .ogg mã hoá Variable Bitrate) chỉ cập nhật ĐÚNG số hiển thị
-    // của currentTime nhưng KHÔNG thực sự đồng bộ lại luồng giải mã âm thanh tới đúng vị trí mới, khiến
-    // tiếng phát ra vẫn là đoạn cũ dù đồng hồ đã nhảy. Gọi lại play() ngay sau khi set currentTime ép trình
-    // duyệt tái đồng bộ đúng vị trí giải mã — nếu trước đó đang tạm dừng, play xong sẽ pause lại ngay tại
-    // đúng vị trí mới (không quay về đầu, không tự ý tiếp tục phát nếu người dùng đang để tạm dừng).
-    const pr=a.play();
-    if(pr&&pr.then){
-      pr.then(()=>{ if(wasPaused)a.pause(); }).catch(()=>{});
-    }else if(wasPaused){
-      a.pause();
-    }
-  }catch(e){}
-  // Trình duyệt cũ/lạ có thể không bắn "seeking" (hiếm) — đặt thời hạn an toàn 600ms để tự mở khóa,
-  // tránh kẹt vĩnh viễn nếu "seeked" vì lý do nào đó không bao giờ đến.
-  clearTimeout(bar._seekSafety);
-  bar._seekSafety=setTimeout(()=>{bar._dragging=false;updateSeekUI();renderFun();},600);
+  const seekToken=(bar._seekToken=(bar._seekToken||0)+1); // hủy các lần seek cũ nếu người dùng seek tiếp trước khi lần trước xong
+
+  try{ a.currentTime=targetTime; }catch(e){}
+
+  // File là cả album ghép nhiều bài dài — seek đến giữa/cuối file cần trình duyệt TẢI LẠI dữ liệu âm thanh
+  // thật tại đúng vị trí đó (không chỉ đổi con số currentTime). Nếu play() ngay khi dữ liệu tại vị trí mới
+  // chưa kịp tải, trình duyệt phát tạm đoạn ĐÃ CÓ SẴN trong buffer cũ (thường là gần đầu file) trong lúc
+  // chờ — nghe như "vẫn là đoạn cũ" dù đồng hồ đã đúng. Nên phải đợi readyState đủ cao TẠI đúng vị trí mới
+  // (qua sự kiện "canplay", bắn lại sau mỗi lần buffer thay đổi) rồi mới thực sự play/giữ trạng thái.
+  function ready(){ return a.readyState>=3 && Math.abs(a.currentTime-targetTime)<1.5; } // readyState 3 = HAVE_FUTURE_DATA
+  function proceed(){
+    if(bar._seekToken!==seekToken)return; // đã có lần seek mới hơn ghi đè, bỏ qua kết quả của lần cũ
+    try{
+      if(!wasPaused){
+        const pr=a.play();
+        if(pr&&pr.catch)pr.catch(()=>{});
+      }
+    }catch(e){}
+    bar._dragging=false;
+    // CHỈ cập nhật số/nhãn hiển thị tại chỗ — KHÔNG gọi renderFun() ở đây: renderFun() tạo lại toàn bộ
+    // DOM của thanh trượt, khiến tham chiếu `bar` (và mọi sự kiện input/change đang chờ trên nó) bị hủy,
+    // làm hỏng các thao tác kéo/seek tiếp theo của người dùng nếu họ seek liên tục nhiều lần.
+    updateSeekUI();
+    updatePlayIconOnly();
+  }
+  function onCanPlay(){
+    if(bar._seekToken!==seekToken){cleanup();return;}
+    if(ready()){cleanup();proceed();}
+  }
+  function cleanup(){
+    a.removeEventListener("canplay",onCanPlay);
+    a.removeEventListener("canplaythrough",onCanPlay);
+    a.removeEventListener("progress",onCanPlay);
+    clearTimeout(bar._seekSafety);
+  }
+  if(ready()){
+    // Đã đủ dữ liệu ngay (ví dụ seek trong đoạn gần đã phát/đã buffer) — không cần chờ gì thêm.
+    proceed();
+  }else{
+    a.addEventListener("canplay",onCanPlay);
+    a.addEventListener("canplaythrough",onCanPlay);
+    a.addEventListener("progress",onCanPlay); // "progress" bắn liên tục trong lúc tải — kiểm tra lại mỗi lần có thêm dữ liệu
+    // An toàn: dù dữ liệu chưa kịp tải đủ (mạng chậm), sau 4 giây vẫn tiến hành để không kẹt UI vô thời hạn.
+    bar._seekSafety=setTimeout(()=>{cleanup();proceed();},4000);
+  }
+}
+// Cập nhật lại icon nút Phát/Tạm dừng (▶/❚❚) và title tại chỗ, không tạo lại DOM — dùng sau khi seek xong
+// để tránh gọi renderFun() (xem lý do trong doSeek).
+function updatePlayIconOnly(){
+  if(musIdx<0)return;
+  const a=getMus();
+  const btn=document.querySelector('.tplay[data-i="'+musIdx+'"]');
+  if(!btn)return;
+  const playing=!a.paused;
+  btn.textContent=playing?'❚❚':'▶';
+  btn.title=playing?'Tạm dừng':'Phát';
+  const track=btn.closest('.track');
+  if(track)track.classList.toggle('playing',playing);
 }
 let _seekDebounce=null;
 $("funPanel").addEventListener("input",(e)=>{
