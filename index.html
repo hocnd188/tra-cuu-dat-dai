@@ -511,12 +511,18 @@ let musEl=null,musIdx=-1;
 function fmtTime(s){if(!isFinite(s)||s<0)s=0;const m=Math.floor(s/60),ss=Math.floor(s%60);return m+":"+String(ss).padStart(2,"0");}
 function getMus(){
   if(!musEl){
-    musEl=new Audio();musEl.preload="none";
+    musEl=new Audio();musEl.preload="metadata"; // "metadata" (không phải "none") để trình duyệt luôn biết duration
+      // và có thể seek chính xác ngay cả trước khi play — "none" khiến seek trước khi đủ dữ liệu
+      // buffer bị bỏ qua/lùi về gần vị trí đã tải (thường là gần đầu file), gây hiện tượng "trôi về đầu".
     musEl.addEventListener("ended",()=>{musIdx=-1;renderFun();});
     musEl.addEventListener("timeupdate",updateSeekUI);
     musEl.addEventListener("loadedmetadata",updateSeekUI);
     musEl.addEventListener("seeking",()=>{musEl._seeking=true;});
-    musEl.addEventListener("seeked",()=>{musEl._seeking=false;updateSeekUI();});
+    musEl.addEventListener("seeked",()=>{
+      musEl._seeking=false;
+      const bar=$("funSeekBar");if(bar)bar._dragging=false; // chỉ mở khóa SAU KHI seek thực sự xong, không phải lúc thả chuột
+      updateSeekUI();
+    });
   }
   return musEl;
 }
@@ -566,6 +572,16 @@ $("funPanel").addEventListener("click",(e)=>{
   const i=parseInt(t.dataset.i,10);
   if(t.dataset.act==="stop")stopTrack();else playTrack(i);
 });
+function doSeek(bar){
+  const a=getMus();const dur=isFinite(a.duration)?a.duration:0;
+  if(!dur)return;
+  const targetTime=(parseFloat(bar.value)/1000)*dur;
+  try{a.currentTime=targetTime;}catch(e){}
+  // Trình duyệt cũ/lạ có thể không bắn "seeking" (hiếm) — đặt thời hạn an toàn 600ms để tự mở khóa,
+  // tránh kẹt vĩnh viễn nếu "seeked" vì lý do nào đó không bao giờ đến.
+  clearTimeout(bar._seekSafety);
+  bar._seekSafety=setTimeout(()=>{bar._dragging=false;updateSeekUI();},600);
+}
 let _seekDebounce=null;
 $("funPanel").addEventListener("input",(e)=>{
   const bar=e.target.closest("#funSeekBar");if(!bar||musIdx<0)return;
@@ -575,18 +591,18 @@ $("funPanel").addEventListener("input",(e)=>{
   const targetTime=dur?(parseFloat(bar.value)/1000)*dur:0;
   const cur=$("funCurTime");if(cur)cur.textContent=fmtTime(targetTime);
   // Debounce việc thực sự seek audio: chỉ set currentTime sau khi ngừng kéo ~120ms,
-  // tránh dồn dập nhiều lệnh seek liên tiếp khi kéo nhanh (mỗi lệnh seek với preload=none
-  // phải tải lại dữ liệu tại vị trí mới, dồn dập sẽ gây giật/đè lên nhau).
+  // tránh dồn dập nhiều lệnh seek liên tiếp khi kéo nhanh (mỗi lệnh seek phải tải lại dữ liệu
+  // tại vị trí mới, dồn dập sẽ gây giật/đè lên nhau).
   if(_seekDebounce)clearTimeout(_seekDebounce);
-  _seekDebounce=setTimeout(()=>{if(dur)a.currentTime=targetTime;},120);
+  _seekDebounce=setTimeout(()=>doSeek(bar),120);
 });
 $("funPanel").addEventListener("change",(e)=>{
   const bar=e.target.closest("#funSeekBar");if(!bar||musIdx<0)return;
-  // Thả chuột: seek ngay lập tức đến đúng vị trí cuối cùng (không chờ debounce nữa), rồi mở khóa cập nhật UI
+  // Thả chuột: hủy debounce đang chờ (nếu có) và seek ngay đến vị trí cuối cùng.
+  // KHÔNG mở khóa _dragging ở đây — chỉ mở khóa khi audio thực sự báo "seeked" xong
+  // (trong getMus()), để timeupdate không có cơ hội ghi đè giá trị sai trong lúc đang seek.
   if(_seekDebounce){clearTimeout(_seekDebounce);_seekDebounce=null;}
-  const a=getMus();const dur=isFinite(a.duration)?a.duration:0;
-  if(dur)a.currentTime=(parseFloat(bar.value)/1000)*dur;
-  bar._dragging=false;
+  doSeek(bar);
 });
 document.addEventListener("click",()=>{const p=$("funPanel");if(p&&!p.hasAttribute("hidden"))p.setAttribute("hidden","");});
 $("q").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();gotoHit(e.shiftKey?hitIdx-1:hitIdx+1);}});
