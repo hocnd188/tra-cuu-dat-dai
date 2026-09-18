@@ -58,7 +58,34 @@ export async function getUser(request, env) {
     await env.DB.prepare("DELETE FROM sessions WHERE token = ?").bind(t).run();
     return null;
   }
+  // Ghi dấu "đã truy cập app" cho Nhật ký hệ thống (lớp "0") ngay tại đây — getUser() là hàm lõi mà
+  // TẤT CẢ endpoint xác thực trong toàn bộ dự án đều gọi (/api/me, hoidap.js, log-qa.js, system-log.js,
+  // unlock-user.js...), nên đây là nơi duy nhất chắc chắn chạy mỗi khi app xác thực một phiên đăng
+  // nhập, bất kể phiên đó mới tạo (qua /api/login) hay đã có từ trước (cookie còn hạn 7 ngày). Đặt log
+  // ở một endpoint /api/ping riêng (thử trước đây) phụ thuộc vào việc index.html gọi đúng route đó và
+  // không bị _middleware.js (chưa từng được cung cấp cho Claude) chặn — rủi ro không kiểm chứng được.
+  // Đặt ngay trong getUser() loại bỏ hoàn toàn rủi ro đó vì tận dụng các route đã CHỨNG MINH hoạt động.
+  logAccessOnce(env, row.id, row.username); // không await — xem lý do trong hàm bên dưới
   return { id: row.id, username: row.username, is_admin: !!row.is_admin };
+}
+
+// Bộ nhớ đệm trong RAM của tiến trình Worker, sống trong suốt vòng đời một instance (thường vài phút
+// đến vài giờ tùy lưu lượng) — dùng để tránh ghi lặp lại nhiều dòng "lớp 0" cho CÙNG một user chỉ vì
+// họ gọi nhiều API khác nhau trong một phiên làm việc (ví dụ: mở trang → gọi /api/me → gõ câu hỏi →
+// gọi /api/log-qa → tất cả trong vài giây, đều đi qua getUser()). Không cần bền vững qua nhiều lần
+// khởi động lại Worker: nếu bị mất do cold start, tối đa chỉ ghi dư thêm 1 dòng "lớp 0", không phải
+// lỗi nghiêm trọng — còn tốt hơn nhiều so với bỏ sót cả một user không được ghi nhận truy cập.
+const _seenThisRun = new Map(); // user_id -> thời điểm (ms) lần ghi log gần nhất
+function logAccessOnce(env, userId, username) {
+  const now = Date.now();
+  const last = _seenThisRun.get(userId);
+  if (last && (now - last) < 5 * 60 * 1000) return; // đã ghi trong 5 phút gần đây — bỏ qua, không ghi trùng
+  _seenThisRun.set(userId, now);
+  // Chạy nền, KHÔNG await: getUser() được gọi bởi mọi endpoint và không được phép làm chậm chúng
+  // (nhất là các endpoint không nhận waitUntil trong tham số của mình). Nếu bị hủy giữa chừng do
+  // response trả về trước, hậu quả chỉ là bỏ sót một lượt ghi log — không ảnh hưởng gì đến chức năng
+  // chính của app, khác hẳn với log đăng nhập/hỏi đáp thật vốn bắt buộc phải đáng tin cậy tuyệt đối.
+  logAccessAsQa(env, userId, username).catch(() => {});
 }
 
 // Tự tạo bảng nếu D1 chưa có (an toàn khi quên chạy schema.sql).

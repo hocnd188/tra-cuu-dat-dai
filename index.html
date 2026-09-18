@@ -841,10 +841,6 @@ renderTabs();render();
 <a id="__authpw" href="#" style="color:#cfe8ff;text-decoration:underline">Đổi mật khẩu</a>
 <a id="__authout" href="#" style="color:#fff;text-decoration:underline">Đăng xuất</a></div>
 <script>(function(){fetch('/api/me').then(r=>r.json()).then(function(u){var w=document.getElementById('__authwho');if(w)w.textContent=(u.username||u.u||'');if(u.is_admin||u.r==='admin'){var a=document.getElementById('__authadmin');if(a)a.style.display='inline';}}).catch(function(){});
-// Ghi dấu "đã truy cập app" cho Nhật ký hệ thống (mục Hỏi đáp, lớp "0") — chạy mỗi lần tải trang này,
-// kể cả khi phiên đăng nhập đã có từ trước (không đi qua /api/login). Không ảnh hưởng gì tới trang
-// nếu lỗi (mất mạng, v.v.) — chỉ là ghi log nền, không có gì hiển thị ra màn hình.
-fetch('/api/ping').catch(function(){});
 var o=document.getElementById('__authout');if(o)o.onclick=function(e){e.preventDefault();fetch('/api/logout',{method:'POST'}).then(function(){location.reload();});};})();</script>
 <div class="citepop-overlay" id="pwOverlay" role="dialog" aria-modal="true">
   <div class="citepop" style="max-width:380px">
