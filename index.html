@@ -509,6 +509,38 @@ $("prevHit").addEventListener("click",()=>gotoHit(hitIdx-1));
 /* ===== Nhạc giải trí ===== */
 let musEl=null,musIdx=-1;
 function fmtTime(s){if(!isFinite(s)||s<0)s=0;const m=Math.floor(s/60),ss=Math.floor(s%60);return m+":"+String(ss).padStart(2,"0");}
+// Trả về thời lượng THẬT của track hiện tại. File nhạc ở đây là một ALBUM ghép nhiều bài nối liền
+// (không phải 1 bài đơn) — phần header ở đầu file .ogg ghép kiểu này thường chỉ mô tả bài ĐẦU TIÊN,
+// khiến trình duyệt báo a.duration là 0/NaN/Infinity dù file vẫn phát được bình thường từ đầu.
+// Đây chính là lý do gốc khiến thanh trượt/seek không hoạt động: mọi hàm seek đều kiểm tra "có biết
+// duration không" trước khi tính vị trí % để tua, nếu duration sai thì seek luôn bị bỏ qua.
+function realDuration(a){
+  if(a._fixedDuration)return a._fixedDuration;
+  return isFinite(a.duration)&&a.duration>0?a.duration:0;
+}
+// Kỹ thuật chuẩn (dùng rộng rãi cho file ghép/stream không có duration đúng trong header): ép trình
+// duyệt set currentTime tới một số cực lớn — trình duyệt buộc phải đọc/quét tới cuối file để biết đó
+// là vị trí không hợp lệ, và trong quá trình đó tự tính lại đúng duration thật. Sau khi có duration
+// thật, quay currentTime về vị trí mong muốn (mặc định 0) rồi gọi callback.
+function fixDurationThenSeek(a,wantTime,cb){
+  const already=isFinite(a.duration)&&a.duration>0&&a.duration<1e6;
+  if(already){ try{a.currentTime=wantTime;}catch(e){} cb(); return; }
+  let done=false;
+  function finish(){
+    if(done)return;done=true;
+    a.removeEventListener("durationchange",onDur);
+    a.removeEventListener("timeupdate",onTime);
+    clearTimeout(safety);
+    try{a.currentTime=wantTime;}catch(e){}
+    cb();
+  }
+  function onDur(){ if(isFinite(a.duration)&&a.duration>0&&a.duration<1e6){a._fixedDuration=a.duration;finish();} }
+  function onTime(){ if(isFinite(a.duration)&&a.duration>0&&a.duration<1e6){a._fixedDuration=a.duration;finish();} }
+  a.addEventListener("durationchange",onDur);
+  a.addEventListener("timeupdate",onTime);
+  const safety=setTimeout(finish,2500); // an toàn: nếu trình duyệt không bao giờ tính ra được, vẫn tiếp tục sau 2.5s
+  try{ a.currentTime=1e101; }catch(e){ finish(); }
+}
 function getMus(){
   if(!musEl){
     musEl=new Audio();musEl.preload="metadata"; // "metadata" (không phải "none") để trình duyệt luôn biết duration
@@ -517,6 +549,7 @@ function getMus(){
     musEl.addEventListener("ended",()=>{musIdx=-1;renderFun();});
     musEl.addEventListener("timeupdate",updateSeekUI);
     musEl.addEventListener("loadedmetadata",updateSeekUI);
+    musEl.addEventListener("durationchange",updateSeekUI);
     musEl.addEventListener("seeking",()=>{musEl._seeking=true;});
     musEl.addEventListener("seeked",()=>{
       musEl._seeking=false;
@@ -532,7 +565,7 @@ function updateSeekUI(){
   // Trong lúc người dùng đang kéo thanh trượt HOẶC audio đang xử lý seek (tải lại dữ liệu tại vị trí mới),
   // không ghi đè giá trị hiển thị — tránh hiện tượng "nhảy về đầu" do currentTime tạm thời chưa chính xác.
   if(bar._dragging||a._seeking)return;
-  const dur=isFinite(a.duration)?a.duration:0;
+  const dur=realDuration(a);
   bar.value=dur?String((a.currentTime/dur)*1000):"0";
   const cur=$("funCurTime"),tot=$("funTotTime");
   if(cur)cur.textContent=fmtTime(a.currentTime);
@@ -564,7 +597,15 @@ function playTrack(i){const m=MUSIC[i];if(!m)return;const a=getMus();
     if(a.paused){a.play().catch(()=>{});}else{a.pause();}
     renderFun();return;}
   try{a.pause();}catch(e){} // tắt bài cũ, chuyển bài mới
-  try{a.src=m.src;a.currentTime=0;const pr=a.play();if(pr&&pr.catch)pr.catch(()=>{});musIdx=i;renderFun();}catch(e){}}
+  a._fixedDuration=null; // track mới — quên duration đã fix của track trước (nếu MUSIC có nhiều phần tử)
+  try{
+    a.src=m.src;a.currentTime=0;
+    const pr=a.play();if(pr&&pr.catch)pr.catch(()=>{});
+    musIdx=i;renderFun();
+    // Tự động tính đúng duration ngay khi bắt đầu phát — để thanh trượt hiển thị đúng tổng thời lượng
+    // và có thể seek chính xác ngay cả khi người dùng chưa từng kéo thử.
+    fixDurationThenSeek(a,0,()=>{ if(!a.paused||musIdx===i){const pr2=a.play();if(pr2&&pr2.catch)pr2.catch(()=>{});} renderFun(); });
+  }catch(e){}}
 $("funBtn").addEventListener("click",(e)=>{e.stopPropagation();const p=$("funPanel");if(!p)return;const willShow=p.hasAttribute("hidden");if(willShow){renderFun();p.removeAttribute("hidden");}else{p.setAttribute("hidden","");}});
 $("funPanel").addEventListener("click",(e)=>{
   e.stopPropagation();
@@ -573,8 +614,14 @@ $("funPanel").addEventListener("click",(e)=>{
   if(t.dataset.act==="stop")stopTrack();else playTrack(i);
 });
 function doSeek(bar){
-  const a=getMus();const dur=isFinite(a.duration)?a.duration:0;
-  if(!dur)return;
+  const a=getMus();
+  let dur=realDuration(a);
+  if(!dur){
+    // Chưa có duration đúng (ví dụ người dùng seek trước khi kịp tự động fix lúc bắt đầu phát) —
+    // tự sửa ngay bây giờ rồi seek lại đúng vị trí mong muốn, thay vì bỏ qua yêu cầu tua của người dùng.
+    fixDurationThenSeek(a,0,()=>{ doSeek(bar); });
+    return;
+  }
   const targetTime=(parseFloat(bar.value)/1000)*dur;
   const wasPaused=a.paused; // ghi nhớ ĐÚNG trạng thái hiện tại để khôi phục lại, không tự ý đổi phát/dừng
   const seekToken=(bar._seekToken=(bar._seekToken||0)+1); // hủy các lần seek cũ nếu người dùng seek tiếp trước khi lần trước xong
@@ -640,7 +687,7 @@ let _seekDebounce=null;
 $("funPanel").addEventListener("input",(e)=>{
   const bar=e.target.closest("#funSeekBar");if(!bar||musIdx<0)return;
   bar._dragging=true;
-  const a=getMus();const dur=isFinite(a.duration)?a.duration:0;
+  const a=getMus();const dur=realDuration(a);
   // Cập nhật ngay phần hiển thị chữ (mượt, không cần chờ audio) dựa trên vị trí thanh trượt đang kéo tới
   const targetTime=dur?(parseFloat(bar.value)/1000)*dur:0;
   const cur=$("funCurTime");if(cur)cur.textContent=fmtTime(targetTime);
