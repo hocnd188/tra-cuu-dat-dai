@@ -571,17 +571,22 @@ function updateSeekUI(){
   if(cur)cur.textContent=fmtTime(a.currentTime);
   if(tot)tot.textContent=fmtTime(dur);
 }
+let _loadingIdx=-1; // track đang trong quá trình tải Blob (chưa sẵn sàng phát), -1 = không có gì đang tải
 function renderFun(){const p=$("funPanel");if(!p)return;if(!MUSIC.length){p.innerHTML='<div class="funempty">Chưa có file nhạc.<br>Hãy gửi các file âm thanh để thêm vào đây.</div>';return;}
   let h='<div class="funhd">Nhạc giải trí — bấm để phát</div>';
   MUSIC.forEach((m,i)=>{
     const on=i===musIdx;
-    const playing=on&&!getMus().paused;
+    const loading=i===_loadingIdx;
+    const playing=on&&!loading&&!getMus().paused;
+    const icon=loading?'<span class="qa-spin" style="width:14px;height:14px"></span>':(playing?'❚❚':'▶');
     h+=`<div class="track${on?' playing':''}" data-i="${i}">`
-      +`<button class="tplay" data-act="play" data-i="${i}" title="${playing?'Tạm dừng':'Phát'}">${playing?'❚❚':'▶'}</button>`
+      +`<button class="tplay" data-act="play" data-i="${i}" title="${loading?'Đang tải...':(playing?'Tạm dừng':'Phát')}"${loading?' disabled':''}>${icon}</button>`
       +`<span class="tname" data-act="play" data-i="${i}">${esc(m.name)}</span>`
-      +`<button class="tstop" data-act="stop" data-i="${i}" title="Dừng">■</button>`
+      +`<button class="tstop" data-act="stop" data-i="${i}" title="Dừng"${loading?' disabled':''}>■</button>`
       +`</div>`;
-    if(on){
+    if(loading){
+      h+=`<div class="funseek" style="color:#789;font-size:12px">Đang tải album (chỉ tải một lần)…</div>`;
+    }else if(on){
       h+=`<div class="funseek">`
         +`<input type="range" id="funSeekBar" min="0" max="1000" value="0">`
         +`<div class="funtime"><span id="funCurTime">0:00</span><span id="funTotTime">0:00</span></div>`
@@ -589,23 +594,58 @@ function renderFun(){const p=$("funPanel");if(!p)return;if(!MUSIC.length){p.inne
     }
   });
   p.innerHTML=h;
-  if(musIdx>=0)updateSeekUI();
+  if(musIdx>=0&&_loadingIdx<0)updateSeekUI();
 }
-function stopTrack(){const a=getMus();try{a.pause();a.currentTime=0;}catch(e){}musIdx=-1;renderFun();}
+const _blobCache={}; // cache: đường dẫn gốc (m.src) -> Blob URL đã tải, tránh tải lại mỗi lần bấm phát cùng 1 bài
+function stopTrack(){const a=getMus();try{a.pause();a.currentTime=0;}catch(e){}musIdx=-1;_loadingIdx=-1;renderFun();}
 function playTrack(i){const m=MUSIC[i];if(!m)return;const a=getMus();
-  if(musIdx===i){ // đang phát bài này -> tạm dừng/tiếp tục
+  if(musIdx===i&&_loadingIdx<0){ // đang phát bài này (không phải đang tải) -> tạm dừng/tiếp tục
     if(a.paused){a.play().catch(()=>{});}else{a.pause();}
     renderFun();return;}
+  if(_loadingIdx===i)return; // đang tải đúng bài này rồi, bỏ qua nếu bấm thêm lần nữa
   try{a.pause();}catch(e){} // tắt bài cũ, chuyển bài mới
   a._fixedDuration=null; // track mới — quên duration đã fix của track trước (nếu MUSIC có nhiều phần tử)
+  musIdx=i;
+
+  if(_blobCache[m.src]){
+    // Đã tải sẵn Blob của bài này từ trước — phát ngay, không cần tải lại.
+    startFromBlob(a,_blobCache[m.src]);
+    return;
+  }
+
+  // Tải toàn bộ file về dưới dạng Blob rồi phát từ Blob URL cục bộ — cách này loại bỏ hoàn toàn sự phụ
+  // thuộc vào máy chủ (Cloudflare Pages) có phục vụ đúng HTTP Range requests (Accept-Ranges/206) hay
+  // không khi tua nhạc. Đây là nguyên nhân thực sự khiến việc tua luôn quay về đầu dù duration đã đúng:
+  // trình duyệt gửi yêu cầu Range để lấy đúng đoạn dữ liệu tại vị trí mới, nhưng nếu máy chủ trả về
+  // 200 (toàn bộ file) thay vì 206 (đúng đoạn yêu cầu) thay vì báo lỗi, trình duyệt phát từ đầu dữ liệu
+  // nhận được — đây là lỗi có tài liệu ghi nhận trên nhiều CDN bao gồm cả Cloudflare, không phải lỗi
+  // JS. Với Blob nội bộ, trình duyệt tự quản lý toàn bộ dữ liệu trong bộ nhớ, seek luôn chính xác 100%.
+  _loadingIdx=i;
+  renderFun(); // hiện ngay trạng thái "Đang tải..." trong panel
+  fetch(m.src).then(r=>{
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    return r.blob();
+  }).then(blob=>{
+    const url=URL.createObjectURL(blob);
+    _blobCache[m.src]=url;
+    if(musIdx===i){ _loadingIdx=-1; startFromBlob(a,url); } // vẫn đang chọn đúng bài này
+    else{ _loadingIdx=-1; } // người dùng đã đổi ý trong lúc tải — không tự phát, nhưng đã cache sẵn cho lần sau
+  }).catch(()=>{
+    _loadingIdx=-1;
+    if(musIdx===i){musIdx=-1;}
+    renderFun();
+  });
+}
+function startFromBlob(a,blobUrl){
   try{
-    a.src=m.src;a.currentTime=0;
+    a.src=blobUrl;a.currentTime=0;
     const pr=a.play();if(pr&&pr.catch)pr.catch(()=>{});
-    musIdx=i;renderFun();
-    // Tự động tính đúng duration ngay khi bắt đầu phát — để thanh trượt hiển thị đúng tổng thời lượng
-    // và có thể seek chính xác ngay cả khi người dùng chưa từng kéo thử.
-    fixDurationThenSeek(a,0,()=>{ if(!a.paused||musIdx===i){const pr2=a.play();if(pr2&&pr2.catch)pr2.catch(()=>{});} renderFun(); });
-  }catch(e){}}
+    renderFun();
+    // Vẫn cần fix duration cho file ghép nhiều bài (Blob giữ nguyên đặc điểm header gốc của file .ogg),
+    // nhưng giờ seek sẽ luôn chính xác vì dữ liệu đã nằm sẵn cục bộ, không cần tải qua mạng nữa.
+    fixDurationThenSeek(a,0,()=>{ const pr2=a.play();if(pr2&&pr2.catch)pr2.catch(()=>{}); renderFun(); });
+  }catch(e){}
+}
 $("funBtn").addEventListener("click",(e)=>{e.stopPropagation();const p=$("funPanel");if(!p)return;const willShow=p.hasAttribute("hidden");if(willShow){renderFun();p.removeAttribute("hidden");}else{p.setAttribute("hidden","");}});
 $("funPanel").addEventListener("click",(e)=>{
   e.stopPropagation();
