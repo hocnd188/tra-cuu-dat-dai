@@ -55,7 +55,9 @@ export async function onRequestGet({ request, env, waitUntil }) {
   // Vài số liệu tổng quan nhanh để hiển thị đầu trang
   const today = new Date().toISOString().slice(0, 10);
   const todayAccess = await env.DB.prepare("SELECT COUNT(*) AS n FROM access_log WHERE substr(ts,1,10) = ?").bind(today).first();
-  const todayQa = await env.DB.prepare("SELECT COUNT(*) AS n FROM ai_usage WHERE substr(ts,1,10) = ?").bind(today).first();
+  // layer='0' = dòng "chỉ truy cập, không hỏi đáp" (xem logAccessAsQa trong _utils.js) — không tính
+  // vào số "hỏi đáp N lượt" hiển thị đầu trang, chỉ hiện trong bảng chi tiết bên dưới.
+  const todayQa = await env.DB.prepare("SELECT COUNT(*) AS n FROM ai_usage WHERE substr(ts,1,10) = ? AND layer != '0'").bind(today).first();
   const todayErr = await env.DB.prepare("SELECT COUNT(*) AS n FROM debug_errors WHERE substr(ts,1,10) = ?").bind(today).first();
 
   return json({

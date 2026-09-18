@@ -194,11 +194,17 @@ load();loadAI();loadLocked();
         +"<td style='font-size:12.5px;color:#9d2f27'>"+esc(x.noi_dung||"")+"</td>"
         +"<td style='font-size:11.5px;color:#678;white-space:pre-wrap'>"+esc(x.chi_tiet||"")+"</td></tr>";
     }
-    const layerTag="<span class='tag' style='"+(x.layer==="L2"?"background:#efe6fb;color:#6a3ca8":"")+"'>"+esc(x.layer||"L1")+"</span>";
+    // layer="0" = dòng "chỉ truy cập, không thao tác Mục hỏi đáp" (ghi tự động mỗi lần đăng nhập,
+    // xem logAccessAsQa trong _utils.js) — không có nội dung/KQ, chỉ có thời gian + người dùng + lớp "0"
+    // để phân biệt với dòng hỏi đáp thật, đúng theo yêu cầu.
+    const isAccessOnly=(x.layer==="0");
+    const layerTag=isAccessOnly
+      ?"<span class='tag' style='background:#eef1f4;color:#678'>0</span>"
+      :"<span class='tag' style='"+(x.layer==="L2"?"background:#efe6fb;color:#6a3ca8":"")+"'>"+esc(x.layer||"L1")+"</span>";
     return "<tr><td style='font-size:12px;white-space:nowrap'>"+esc(fmtVN(x.ts))+"</td>"
       +"<td>"+layerTag+"</td><td>"+esc(x.username)+"</td>"
-      +"<td style='font-size:12.5px;white-space:pre-wrap'>"+esc(x.cau_hoi||"")+"</td>"
-      +"<td>"+(x.ok===0?"✖":"✔")+"</td></tr>";
+      +"<td style='font-size:12.5px;white-space:pre-wrap;"+(isAccessOnly?"color:#a9b3bd":"")+"'>"+(isAccessOnly?"—":esc(x.cau_hoi||""))+"</td>"
+      +"<td>"+(isAccessOnly?"":(x.ok===0?"✖":"✔"))+"</td></tr>";
   }
 
   function slLoad(){

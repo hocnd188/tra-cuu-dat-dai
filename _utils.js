@@ -127,6 +127,26 @@ export async function logAccess(env, request, userId, username) {
   }
 }
 
+// Ghi 1 dòng "lớp 0" vào bảng ai_usage mỗi lần một tài khoản đăng nhập thành công — đại diện cho
+// việc "đã truy cập app" ngay cả khi người dùng sau đó không hề đụng vào Mục hỏi đáp. Nhờ vậy Nhật ký
+// hệ thống (kind=qa) hiển thị đủ MỌI người dùng đã vào app trong ngày, không chỉ những ai có thao tác
+// hỏi đáp thật. Cố tình KHÔNG ghi cau_hoi/model/ok (để NULL) để phân biệt với dòng hỏi đáp thật — cột
+// layer='0' là dấu hiệu duy nhất admin.html cần để hiển thị "0" ở cột LỚP và bỏ trống nội dung/KQ.
+// Không được để lỗi ghi log này làm hỏng luồng đăng nhập chính — cùng nguyên tắc với logAccess().
+export async function logAccessAsQa(env, userId, username) {
+  try {
+    await ensureSchema(env);
+    await env.DB.prepare(
+      "INSERT INTO ai_usage(user_id,username,ts,cau_hoi,model,ok,ghi_chu,layer) VALUES(?,?,?,?,?,?,?,?)"
+    ).bind(userId, username, new Date().toISOString(), null, null, null, "", "0").run();
+  } catch (e) {
+    try {
+      await env.DB.prepare("INSERT INTO debug_errors(ts,noi_dung,chi_tiet) VALUES(?,?,?)")
+        .bind(new Date().toISOString(), "logAccessAsQa thất bại cho user_id=" + userId + " username=" + username, String(e && e.message || e)).run();
+    } catch (e2) {}
+  }
+}
+
 // Dọn log cũ hơn N ngày (mặc định 90) để tránh phình dung lượng D1. Không throw — chỉ best-effort.
 export async function purgeOldLogs(env, days = 90) {
   try {

@@ -1,4 +1,4 @@
-import { json, verifyPassword, newToken, sessionCookie, logAccess, purgeOldLogs, ensureSchema, checkLoginLock, recordLoginFailure, clearLoginFailures } from "../_utils.js";
+import { json, verifyPassword, newToken, sessionCookie, logAccess, logAccessAsQa, purgeOldLogs, ensureSchema, checkLoginLock, recordLoginFailure, clearLoginFailures } from "../_utils.js";
 export async function onRequestPost({ request, env, waitUntil }) {
   await ensureSchema(env);
   const { username, password } = await request.json().catch(() => ({}));
@@ -36,6 +36,11 @@ export async function onRequestPost({ request, env, waitUntil }) {
   // if your response is returned"), khiến log biến mất mà không có lỗi gì để thấy. Await ở đây đánh
   // đổi thêm một khoảng trễ nhỏ (một lần ghi D1) để đảm bảo KHÔNG BAO GIỜ mất log truy cập.
   await logAccess(env, request, u.id, u.username);
+  // Ghi thêm 1 dòng "lớp 0" vào ai_usage — đại diện cho "đã truy cập app", để Nhật ký hệ thống (mục
+  // Hỏi đáp) liệt kê được MỌI người dùng đăng nhập trong ngày, không chỉ ai có thao tác hỏi đáp thật.
+  // Cùng nguyên tắc await-đồng-bộ như logAccess ở trên — không dùng waitUntil để tránh lặp lại lỗi mất
+  // log đã từng gặp và sửa trước đây.
+  await logAccessAsQa(env, u.id, u.username);
   // Dọn log cũ vẫn có thể chạy nền an toàn — không có gì phụ thuộc vào nó xong trước khi trả response,
   // và nếu nó bị hủy giữa chừng thì chỉ là dọn dẹp trễ một chút, không mất dữ liệu quan trọng.
   if (typeof waitUntil === "function") {
