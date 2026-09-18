@@ -29,13 +29,19 @@ export async function onRequestPost({ request, env, waitUntil }) {
     .bind(token, u.id, exp).run();
   // Xóa bộ đếm sai NGAY (đồng bộ) khi đăng nhập đúng — không để sót nếu có thao tác nào sau đó lỗi.
   await clearLoginFailures(env, username);
-  // Ghi nhật ký truy cập và dọn log cũ có thể chạy nền — không ảnh hưởng đến tính đúng của cơ chế khóa.
+  // Ghi nhật ký truy cập ĐỒNG BỘ (await), không dùng waitUntil nữa: nếu waitUntil không được truyền
+  // đúng vào context (tùy phiên bản/cách deploy Cloudflare Pages Functions), hoặc response trả về
+  // trước khi promise nền kịp hoàn tất, runtime có thể hủy công việc nền giữa chừng một cách âm thầm
+  // (đây là hành vi đã được chính tài liệu Cloudflare xác nhận: "Pending promises will be cancelled
+  // if your response is returned"), khiến log biến mất mà không có lỗi gì để thấy. Await ở đây đánh
+  // đổi thêm một khoảng trễ nhỏ (một lần ghi D1) để đảm bảo KHÔNG BAO GIỜ mất log truy cập.
+  await logAccess(env, request, u.id, u.username);
+  // Dọn log cũ vẫn có thể chạy nền an toàn — không có gì phụ thuộc vào nó xong trước khi trả response,
+  // và nếu nó bị hủy giữa chừng thì chỉ là dọn dẹp trễ một chút, không mất dữ liệu quan trọng.
   if (typeof waitUntil === "function") {
-    waitUntil(logAccess(env, request, u.id, u.username));
     waitUntil(purgeOldLogs(env, 90));
   } else {
-    logAccess(env, request, u.id, u.username);
-    purgeOldLogs(env, 90);
+    purgeOldLogs(env, 90).catch(() => {});
   }
   return json({ ok: true, is_admin: !!u.is_admin }, 200, { "Set-Cookie": sessionCookie(token, exp) });
 }

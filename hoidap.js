@@ -38,19 +38,27 @@ export async function onRequestPost({ request, env, waitUntil }) {
     if (!ok) err = "empty response";
   } catch (e) { err = String(e && e.message || e).slice(0, 200); }
 
-  // Ghi nhật ký để admin theo dõi (kể cả khi lỗi) — chạy nền (waitUntil), không chặn phản hồi cho user
-  const logTask = (async () => {
+  // Ghi nhật ký để admin theo dõi (kể cả khi lỗi). Await ĐỒNG BỘ trước khi trả response — không dùng
+  // waitUntil nữa: nếu waitUntil không được truyền đúng vào context, hoặc response trả về trước khi
+  // promise nền kịp hoàn tất, Cloudflare Workers runtime có thể hủy công việc nền giữa chừng một cách
+  // âm thầm (hành vi này được chính tài liệu Cloudflare xác nhận), khiến log Lớp 2 biến mất mà không
+  // có lỗi gì để thấy — cùng lỗ hổng đã phát hiện và sửa ở login.js. Đánh đổi một khoảng trễ nhỏ (một
+  // lần ghi D1) để đảm bảo KHÔNG BAO GIỜ mất log, quan trọng hơn nhiều so với độ trễ thêm không đáng kể.
+  try {
+    await env.DB.prepare(
+      "INSERT INTO ai_usage(user_id,username,ts,cau_hoi,model,ok,ghi_chu,layer) VALUES(?,?,?,?,?,?,?,?)"
+    ).bind(u.id, u.username, new Date().toISOString(), String(cau_hoi), model, ok, err, "L2").run();
+  } catch (e) {
     try {
-      await env.DB.prepare(
-        "INSERT INTO ai_usage(user_id,username,ts,cau_hoi,model,ok,ghi_chu,layer) VALUES(?,?,?,?,?,?,?,?)"
-      ).bind(u.id, u.username, new Date().toISOString(), String(cau_hoi), model, ok, err, "L2").run();
-    } catch (e) {}
-  })();
+      await env.DB.prepare("INSERT INTO debug_errors(ts,noi_dung,chi_tiet) VALUES(?,?,?)")
+        .bind(new Date().toISOString(), "hoidap (L2) ghi log thất bại cho user_id=" + u.id + " username=" + u.username, String(e && e.message || e)).run();
+    } catch (e2) {}
+  }
+  // Dọn log cũ vẫn chạy nền an toàn — không có gì phụ thuộc vào nó xong trước khi trả response.
   if (typeof waitUntil === "function") {
-    waitUntil(logTask);
     waitUntil(purgeOldLogs(env, 90));
   } else {
-    await logTask;
+    purgeOldLogs(env, 90).catch(() => {});
   }
 
   if (!ok) return json({ error: "AI không phản hồi (" + err + "). Thử lại sau." }, 502);
