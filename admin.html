@@ -88,6 +88,16 @@
        <button class="sec" id="slNext">Sau ›</button>
      </div>
    </div>
+   <div style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px">
+     <div style="font-size:12px;font-weight:700;color:#9d2f27;text-transform:uppercase;margin-bottom:8px">⚠ Xóa nhật ký (không thể hoàn tác)</div>
+     <div class="row">
+       <label class="chk"><input type="checkbox" id="clAccess" checked> Đăng nhập</label>
+       <label class="chk"><input type="checkbox" id="clQa" checked> Hỏi đáp (Lớp 1+2, gồm cả lượt truy cập "0")</label>
+       <input id="clDate" type="date" title="Để trống = xóa toàn bộ, mọi ngày">
+       <button class="danger" id="clGo">Xóa</button>
+     </div>
+     <div class="msg" id="clMsg" style="color:#789">Để trống ngày để xóa toàn bộ; chọn ngày để chỉ xóa đúng ngày đó.</div>
+   </div>
  </div>
 </div>
 </div>
@@ -246,6 +256,30 @@ load();loadAI();loadLocked();
   document.getElementById("slKind").addEventListener("change",()=>{slState.page=1;slLoad();});
   document.getElementById("slPrev").addEventListener("click",()=>{if(slState.page>1){slState.page--;slLoad();}});
   document.getElementById("slNext").addEventListener("click",()=>{slState.page++;slLoad();});
+
+  // --- Xóa nhật ký (không thể hoàn tác) ---
+  document.getElementById("clGo").addEventListener("click",()=>{
+    const wantAccess=document.getElementById("clAccess").checked;
+    const wantQa=document.getElementById("clQa").checked;
+    const clMsg=document.getElementById("clMsg");
+    if(!wantAccess&&!wantQa){clMsg.style.color="#9d2f27";clMsg.textContent="Hãy chọn ít nhất một loại nhật ký để xóa.";return;}
+    const kind=(wantAccess&&wantQa)?"both":(wantAccess?"access":"qa");
+    const date=document.getElementById("clDate").value; // rỗng = toàn bộ
+    const scopeTxt=date?("ngày "+date):"TOÀN BỘ mọi ngày";
+    const typeTxt=(kind==="both")?"Đăng nhập + Hỏi đáp":(kind==="access"?"Đăng nhập":"Hỏi đáp");
+    if(!confirm("Xóa vĩnh viễn nhật ký ["+typeTxt+"] cho "+scopeTxt+"?\nHành động này KHÔNG THỂ hoàn tác."))return;
+    clMsg.style.color="#5a6472";clMsg.textContent="Đang xóa…";
+    document.getElementById("clGo").disabled=true;
+    fetch("/api/clear-log",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({kind,date})})
+      .then(async r=>{const d=await r.json();if(!r.ok)throw new Error(d.error||"Lỗi");return d;})
+      .then(d=>{
+        clMsg.style.color="#1b7a43";
+        clMsg.textContent="Đã xóa "+d.deleted_access+" dòng đăng nhập, "+d.deleted_qa+" dòng hỏi đáp.";
+        slState.page=1;slLoad(); // tải lại bảng để phản ánh ngay dữ liệu đã xóa
+      })
+      .catch(e=>{clMsg.style.color="#9d2f27";clMsg.textContent="Lỗi khi xóa: "+e.message;})
+      .finally(()=>{document.getElementById("clGo").disabled=false;});
+  });
 
   slLoad();
 })();
