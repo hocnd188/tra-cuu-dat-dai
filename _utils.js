@@ -58,32 +58,13 @@ export async function getUser(request, env) {
     await env.DB.prepare("DELETE FROM sessions WHERE token = ?").bind(t).run();
     return null;
   }
-  // Ghi dấu "đã truy cập app" cho Nhật ký hệ thống (lớp "0") ngay tại đây — getUser() là hàm lõi mà
-  // TẤT CẢ endpoint xác thực trong toàn bộ dự án đều gọi (/api/me, hoidap.js, log-qa.js, system-log.js,
-  // unlock-user.js...), nên đây là nơi duy nhất chắc chắn chạy mỗi khi app xác thực một phiên đăng
-  // nhập, bất kể phiên đó mới tạo (qua /api/login) hay đã có từ trước (cookie còn hạn 7 ngày).
-  //
-  // QUAN TRỌNG — bài học từ 2 lần thử trước đều thất bại trên production dù test cục bộ "qua": bản đầu
-  // dùng waitUntil ở endpoint /api/ping riêng nhưng route đó có thể không được index.html gọi đúng.
-  // Bản thứ hai (đã sửa rồi lại sai) gọi logAccessAsQa() KHÔNG await ngay tại đây — vì getUser() không
-  // nhận waitUntil từ nơi gọi nó (chỉ nhận request, env), promise "chạy nền" đó gần như chắc chắn bị
-  // Cloudflare Workers runtime HỦY GIỮA CHỪNG trước khi kịp ghi vào D1, đúng cơ chế đã từng gây mất log
-  // ở login.js/hoidap.js trước khi được sửa thành await đồng bộ (xem lịch sử 2 file đó). Awaiting ở đây
-  // cũng theo đúng nguyên tắc y hệt: đánh đổi một khoảng trễ nhỏ (một lần ghi D1, có chống trùng nên
-  // phần lớn thời gian là một lần đọc D1 rất nhanh) để đảm bảo KHÔNG BAO GIỜ mất log truy cập, thay vì
-  // "chạy nền" trông có vẻ nhanh hơn nhưng trong thực tế thường không chạy được đến cuối.
-  await logAccessOnce(env, row.id, row.username);
   return { id: row.id, username: row.username, is_admin: !!row.is_admin };
 }
 
 // Ghi 1 dòng "lớp 0" cho user này — nhưng chỉ nếu CHƯA ghi trong 30 phút gần đây (tra trong chính bảng
-// ai_usage, không dùng bộ nhớ RAM: RAM của một Worker instance không được chia sẻ giữa các request đến
-// các instance khác nhau — Cloudflare có thể khởi tạo nhiều instance song song hoặc tạo instance mới
-// bất cứ lúc nào, nên một biến toàn cục trong RAM KHÔNG đáng tin cậy để chống trùng lặp giữa các
-// request khác nhau, dù trong cùng một tiến trình nó có vẻ hoạt động khi test cục bộ. Tra D1 trực tiếp
-// chậm hơn một chút (một lần SELECT thêm) nhưng đáng tin cậy tuyệt đối bất kể Cloudflare chạy bao
-// nhiêu instance — đây là bài học thứ hai rút ra khi rà soát lại code trong phiên này.
-async function logAccessOnce(env, userId, username) {
+// ai_usage). Dùng bởi /api/me — xem chú thích đầy đủ trong file đó về lý do đặt log ở /api/me thay vì
+// trong getUser() (đã thử và có rủi ro không kiểm chứng được liên quan đến waitUntil).
+export async function logAccessOnce(env, userId, username) {
   try {
     await ensureSchema(env);
     const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
