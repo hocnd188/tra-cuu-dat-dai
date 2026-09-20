@@ -88,18 +88,35 @@ export async function onRequestPost({ request, env }) {
     return json({ error: "Định dạng ngày không hợp lệ (cần YYYY-MM-DD)" }, 400);
   }
 
+  // QUAN TRỌNG: admin.html hiển thị MỌI thời gian theo giờ Việt Nam (UTC+7, qua hàm fmtVN() cộng
+  // thêm 7 giờ trước khi hiển thị), trong khi cột ts trong D1 lưu giờ UTC thuần túy. Nếu so sánh
+  // thẳng substr(ts,1,10) = ngày admin chọn, các dòng xảy ra trong khung 17:00–23:59 UTC (tức
+  // 00:00–06:59 sáng hôm sau theo giờ VN) sẽ bị lệch một ngày so với những gì admin nhìn thấy trên
+  // màn hình — ví dụ dòng hiển thị "16/09 00:40" thực ra có ts UTC bắt đầu bằng "2026-09-15", nên
+  // chọn xóa "ngày 16" sẽ bỏ sót đúng dòng admin đang nhìn thấy là ngày 16. Sửa bằng cách tính
+  // khoảng UTC chính xác tương ứng với "một ngày theo giờ VN": ngày VN X kéo dài từ
+  // (X 00:00:00 +07:00) đến (X 23:59:59.999 +07:00), quy đổi sang UTC là từ (X-1 ngày, 17:00:00 UTC)
+  // đến (X ngày, 16:59:59.999 UTC).
+  let dayFromUtc = null, dayToUtc = null;
+  if (day) {
+    const startVn = new Date(day + "T00:00:00.000+07:00");
+    const endVn = new Date(day + "T23:59:59.999+07:00");
+    dayFromUtc = startVn.toISOString();
+    dayToUtc = endVn.toISOString();
+  }
+
   let deletedAccess = 0, deletedQa = 0;
   try {
     if (kind === "access" || kind === "both") {
       const stmt = day
-        ? env.DB.prepare("DELETE FROM access_log WHERE substr(ts,1,10) = ?").bind(day)
+        ? env.DB.prepare("DELETE FROM access_log WHERE ts >= ? AND ts <= ?").bind(dayFromUtc, dayToUtc)
         : env.DB.prepare("DELETE FROM access_log");
       const r = await stmt.run();
       deletedAccess = (r && r.meta && r.meta.changes) || 0;
     }
     if (kind === "qa" || kind === "both") {
       const stmt = day
-        ? env.DB.prepare("DELETE FROM ai_usage WHERE substr(ts,1,10) = ?").bind(day)
+        ? env.DB.prepare("DELETE FROM ai_usage WHERE ts >= ? AND ts <= ?").bind(dayFromUtc, dayToUtc)
         : env.DB.prepare("DELETE FROM ai_usage");
       const r = await stmt.run();
       deletedQa = (r && r.meta && r.meta.changes) || 0;
