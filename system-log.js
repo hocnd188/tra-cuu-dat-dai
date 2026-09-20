@@ -75,38 +75,43 @@ export async function onRequestGet({ request, env, waitUntil }) {
 // trong dự án này (xem lịch sử functions/api/users/[id].js).
 // Body JSON: kind = "access" | "qa" | "both" (bắt buộc); date = "YYYY-MM-DD" (tùy chọn, bỏ trống = xóa TOÀN BỘ)
 export async function onRequestPost({ request, env }) {
-  await ensureSchema(env);
-  const u = await getUser(request, env);
-  if (!u || !u.is_admin) return json({ error: "forbidden" }, 403);
-
-  const { kind, date } = await request.json().catch(() => ({}));
-  if (kind !== "access" && kind !== "qa" && kind !== "both") {
-    return json({ error: "Thiếu hoặc sai tham số kind (access | qa | both)" }, 400);
-  }
-  const day = (date || "").trim();
-  if (day && !/^\d{4}-\d{2}-\d{2}$/.test(day)) {
-    return json({ error: "Định dạng ngày không hợp lệ (cần YYYY-MM-DD)" }, 400);
-  }
-
-  // QUAN TRỌNG: admin.html hiển thị MỌI thời gian theo giờ Việt Nam (UTC+7, qua hàm fmtVN() cộng
-  // thêm 7 giờ trước khi hiển thị), trong khi cột ts trong D1 lưu giờ UTC thuần túy. Nếu so sánh
-  // thẳng substr(ts,1,10) = ngày admin chọn, các dòng xảy ra trong khung 17:00–23:59 UTC (tức
-  // 00:00–06:59 sáng hôm sau theo giờ VN) sẽ bị lệch một ngày so với những gì admin nhìn thấy trên
-  // màn hình — ví dụ dòng hiển thị "16/09 00:40" thực ra có ts UTC bắt đầu bằng "2026-09-15", nên
-  // chọn xóa "ngày 16" sẽ bỏ sót đúng dòng admin đang nhìn thấy là ngày 16. Sửa bằng cách tính
-  // khoảng UTC chính xác tương ứng với "một ngày theo giờ VN": ngày VN X kéo dài từ
-  // (X 00:00:00 +07:00) đến (X 23:59:59.999 +07:00), quy đổi sang UTC là từ (X-1 ngày, 17:00:00 UTC)
-  // đến (X ngày, 16:59:59.999 UTC).
-  let dayFromUtc = null, dayToUtc = null;
-  if (day) {
-    const startVn = new Date(day + "T00:00:00.000+07:00");
-    const endVn = new Date(day + "T23:59:59.999+07:00");
-    dayFromUtc = startVn.toISOString();
-    dayToUtc = endVn.toISOString();
-  }
-
-  let deletedAccess = 0, deletedQa = 0;
+  // Bọc TOÀN BỘ hàm trong try/catch — kể cả ensureSchema/getUser phía trên cùng — để đảm bảo tuyệt
+  // đối luôn trả về JSON hợp lệ. Trước đây chỉ bọc try/catch quanh phần DELETE; nếu ensureSchema hoặc
+  // getUser ném lỗi (ví dụ trục trặc D1 tạm thời), lỗi thoát ra ngoài không được xử lý có thể khiến
+  // Cloudflare trả về response rỗng hoặc trang lỗi không phải JSON — đúng triệu chứng lỗi phía trình
+  // duyệt "Unexpected end of JSON input" mà admin.html báo khi gọi .json() trên response đó.
   try {
+    await ensureSchema(env);
+    const u = await getUser(request, env);
+    if (!u || !u.is_admin) return json({ error: "forbidden" }, 403);
+
+    const { kind, date } = await request.json().catch(() => ({}));
+    if (kind !== "access" && kind !== "qa" && kind !== "both") {
+      return json({ error: "Thiếu hoặc sai tham số kind (access | qa | both)" }, 400);
+    }
+    const day = (date || "").trim();
+    if (day && !/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+      return json({ error: "Định dạng ngày không hợp lệ (cần YYYY-MM-DD)" }, 400);
+    }
+
+    // QUAN TRỌNG: admin.html hiển thị MỌI thời gian theo giờ Việt Nam (UTC+7, qua hàm fmtVN() cộng
+    // thêm 7 giờ trước khi hiển thị), trong khi cột ts trong D1 lưu giờ UTC thuần túy. Nếu so sánh
+    // thẳng substr(ts,1,10) = ngày admin chọn, các dòng xảy ra trong khung 17:00–23:59 UTC (tức
+    // 00:00–06:59 sáng hôm sau theo giờ VN) sẽ bị lệch một ngày so với những gì admin nhìn thấy trên
+    // màn hình — ví dụ dòng hiển thị "16/09 00:40" thực ra có ts UTC bắt đầu bằng "2026-09-15", nên
+    // chọn xóa "ngày 16" sẽ bỏ sót đúng dòng admin đang nhìn thấy là ngày 16. Sửa bằng cách tính
+    // khoảng UTC chính xác tương ứng với "một ngày theo giờ VN": ngày VN X kéo dài từ
+    // (X 00:00:00 +07:00) đến (X 23:59:59.999 +07:00), quy đổi sang UTC là từ (X-1 ngày, 17:00:00 UTC)
+    // đến (X ngày, 16:59:59.999 UTC).
+    let dayFromUtc = null, dayToUtc = null;
+    if (day) {
+      const startVn = new Date(day + "T00:00:00.000+07:00");
+      const endVn = new Date(day + "T23:59:59.999+07:00");
+      dayFromUtc = startVn.toISOString();
+      dayToUtc = endVn.toISOString();
+    }
+
+    let deletedAccess = 0, deletedQa = 0;
     if (kind === "access" || kind === "both") {
       const stmt = day
         ? env.DB.prepare("DELETE FROM access_log WHERE ts >= ? AND ts <= ?").bind(dayFromUtc, dayToUtc)
@@ -121,9 +126,15 @@ export async function onRequestPost({ request, env }) {
       const r = await stmt.run();
       deletedQa = (r && r.meta && r.meta.changes) || 0;
     }
+
+    return json({ ok: true, deleted_access: deletedAccess, deleted_qa: deletedQa });
   } catch (e) {
+    // Ghi lại lỗi thật vào debug_errors để admin có thể xem qua dropdown "Lỗi hệ thống (debug)" nếu
+    // vẫn còn gặp lỗi sau bản sửa này — cho biết chính xác nguyên nhân thay vì chỉ đoán.
+    try {
+      await env.DB.prepare("INSERT INTO debug_errors(ts,noi_dung,chi_tiet) VALUES(?,?,?)")
+        .bind(new Date().toISOString(), "system-log POST (xóa nhật ký) thất bại", String(e && e.stack || e && e.message || e)).run();
+    } catch (e2) {}
     return json({ error: "Lỗi khi xóa: " + String(e && e.message || e) }, 500);
   }
-
-  return json({ ok: true, deleted_access: deletedAccess, deleted_qa: deletedQa });
 }
