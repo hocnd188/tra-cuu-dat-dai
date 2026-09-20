@@ -13,10 +13,39 @@ import { json, getUser, ensureSchema, purgeOldLogs } from "../_utils.js";
 //   page      = số trang (bắt đầu từ 1), page_size mặc định 50, tối đa 200
 export async function onRequestGet({ request, env, waitUntil }) {
   await ensureSchema(env);
-  const u = await getUser(request, env);
-  if (!u || !u.is_admin) return json({ error: "forbidden" }, 403);
 
   const url0 = new URL(request.url);
+
+  // Ghi dấu "đã truy cập app" cho MỌI user (không chỉ admin) — đặt TRƯỚC kiểm tra is_admin bên dưới
+  // vì nhánh này phải chạy được cho bất kỳ ai đăng nhập, không riêng admin. Đặt trong file này (thay
+  // vì log-qa.js) vì đây là file đã CHỨNG MINH deploy đúng trên production gần nhất (tính năng xóa
+  // nhật ký hoạt động) — tránh phụ thuộc vào việc log-qa.js có được cập nhật đúng hay không, sau khi
+  // phát hiện bản log-qa.js cũ (thiếu nhánh xử lý ping) khiến mỗi lần tải trang ghi nhầm 1 dòng "L1"
+  // rỗng thay vì "lớp 0" — xem lịch sử sự cố này để biết chi tiết đầy đủ.
+  if (url0.searchParams.get("action") === "ping") {
+    const u0 = await getUser(request, env);
+    if (!u0) return json({ ok: false }, 200);
+    try {
+      const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+      const recent = await env.DB.prepare(
+        "SELECT id FROM ai_usage WHERE user_id = ? AND layer = '0' AND ts > ? ORDER BY id DESC LIMIT 1"
+      ).bind(u0.id, cutoff).first();
+      if (!recent) {
+        await env.DB.prepare(
+          "INSERT INTO ai_usage(user_id,username,ts,cau_hoi,model,ok,ghi_chu,layer) VALUES(?,?,?,?,?,?,?,?)"
+        ).bind(u0.id, u0.username, new Date().toISOString(), null, null, null, "", "0").run();
+      }
+    } catch (e) {
+      try {
+        await env.DB.prepare("INSERT INTO debug_errors(ts,noi_dung,chi_tiet) VALUES(?,?,?)")
+          .bind(new Date().toISOString(), "system-log (ping) thất bại cho user_id=" + u0.id, String(e && e.message || e)).run();
+      } catch (e2) {}
+    }
+    return json({ ok: true });
+  }
+
+  const u = await getUser(request, env);
+  if (!u || !u.is_admin) return json({ error: "forbidden" }, 403);
 
   // Xóa Nhật ký hệ thống theo lựa chọn của admin — không thể hoàn tác. Cố tình dùng chung phương thức
   // GET (qua query param action=clear) thay vì POST riêng: bản trước dùng onRequestPost trong cùng
