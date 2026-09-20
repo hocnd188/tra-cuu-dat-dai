@@ -43,7 +43,13 @@ export async function onRequestPost({ request, env, waitUntil }) {
   if (!p.can_qa) return json({ error: "forbidden" }, 403);
 
   const { cau_hoi, so_can_cu } = body;
-  const text = String(cau_hoi || "").slice(0, 4000);
+  const text = String(cau_hoi || "").trim().slice(0, 4000);
+  // Lớp phòng thủ: không ghi dòng L1 nào nếu không có nội dung câu hỏi thật. Bảo vệ khỏi trường hợp
+  // một request khác (ví dụ {ping:true} từ index.html) vô tình đến đây mà KHÔNG đi qua nhánh
+  // if(body.ping) ở trên — ví dụ nếu phiên bản file này trên máy chủ chưa cập nhật nhánh đó (stale
+  // file, đã từng xảy ra thật với chính dự án này) — cau_hoi sẽ luôn là undefined/rỗng và trước đây
+  // bị ghi nhầm thành 1 dòng "L1" với nội dung rỗng mỗi lần trang tải, làm phình nhật ký sai sự thật.
+  if (!text) return json({ error: "Thiếu nội dung câu hỏi" }, 400);
   const ghiChu = (so_can_cu !== undefined && so_can_cu !== null) ? ("so_can_cu=" + so_can_cu) : "";
 
   try {
