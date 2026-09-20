@@ -270,7 +270,7 @@ load();loadAI();loadLocked();
     if(!confirm("Xóa vĩnh viễn nhật ký ["+typeTxt+"] cho "+scopeTxt+"?\nHành động này KHÔNG THỂ hoàn tác."))return;
     clMsg.style.color="#5a6472";clMsg.textContent="Đang xóa…";
     document.getElementById("clGo").disabled=true;
-    fetch("/api/system-log",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({kind,date})})
+    fetch("/api/system-log?"+new URLSearchParams({action:"clear",clear_kind:kind,clear_date:date}).toString())
       .then(async r=>{const d=await r.json();if(!r.ok)throw new Error(d.error||"Lỗi");return d;})
       .then(d=>{
         clMsg.style.color="#1b7a43";
