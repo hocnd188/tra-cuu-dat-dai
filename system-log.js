@@ -13,47 +13,16 @@ import { json, getUser, ensureSchema, purgeOldLogs } from "../_utils.js";
 //   page      = số trang (bắt đầu từ 1), page_size mặc định 50, tối đa 200
 export async function onRequestGet({ request, env, waitUntil }) {
   await ensureSchema(env);
-
-  const url0 = new URL(request.url);
-
-  // Ghi dấu "đã truy cập app" cho MỌI user (không chỉ admin) — đặt TRƯỚC kiểm tra is_admin bên dưới
-  // vì nhánh này phải chạy được cho bất kỳ ai đăng nhập, không riêng admin. Đặt trong file này (thay
-  // vì log-qa.js) vì đây là file đã CHỨNG MINH deploy đúng trên production gần nhất (tính năng xóa
-  // nhật ký hoạt động) — tránh phụ thuộc vào việc log-qa.js có được cập nhật đúng hay không, sau khi
-  // phát hiện bản log-qa.js cũ (thiếu nhánh xử lý ping) khiến mỗi lần tải trang ghi nhầm 1 dòng "L1"
-  // rỗng thay vì "lớp 0" — xem lịch sử sự cố này để biết chi tiết đầy đủ.
-  if (url0.searchParams.get("action") === "ping") {
-    const u0 = await getUser(request, env);
-    if (!u0) return json({ ok: false }, 200);
-    try {
-      const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
-      const recent = await env.DB.prepare(
-        "SELECT id FROM ai_usage WHERE user_id = ? AND layer = '0' AND ts > ? ORDER BY id DESC LIMIT 1"
-      ).bind(u0.id, cutoff).first();
-      if (!recent) {
-        await env.DB.prepare(
-          "INSERT INTO ai_usage(user_id,username,ts,cau_hoi,model,ok,ghi_chu,layer) VALUES(?,?,?,?,?,?,?,?)"
-        ).bind(u0.id, u0.username, new Date().toISOString(), null, null, null, "", "0").run();
-      }
-    } catch (e) {
-      try {
-        await env.DB.prepare("INSERT INTO debug_errors(ts,noi_dung,chi_tiet) VALUES(?,?,?)")
-          .bind(new Date().toISOString(), "system-log (ping) thất bại cho user_id=" + u0.id, String(e && e.message || e)).run();
-      } catch (e2) {}
-    }
-    return json({ ok: true });
-  }
-
   const u = await getUser(request, env);
   if (!u || !u.is_admin) return json({ error: "forbidden" }, 403);
 
-  // Xóa Nhật ký hệ thống theo lựa chọn của admin — không thể hoàn tác. Cố tình dùng chung phương thức
-  // GET (qua query param action=clear) thay vì POST riêng: bản trước dùng onRequestPost trong cùng
-  // file này bị lỗi "Unexpected end of JSON input" trên production dù logic đã kiểm chứng đúng 100%
-  // với D1 thật (Miniflare) khi gọi trực tiếp — nghi ngờ cao nhất là một _middleware.js trong repo xử
-  // lý sai method POST tới /api/* (dự án này từng có middleware gate một số path, xem ghi chú lịch sử
-  // liên quan ERR_TOO_MANY_REDIRECTS). Dùng lại đúng phương thức GET đã CHỨNG MINH hoạt động (admin
-  // đang xem được Nhật ký hệ thống bình thường) loại bỏ hoàn toàn nghi vấn đó.
+  const url0 = new URL(request.url);
+
+  // Xóa Nhật ký hệ thống theo lựa chọn của admin — không thể hoàn tác. Dùng phương thức GET (qua
+  // query param action=clear) thay vì POST riêng: nguyên nhân lỗi ban đầu ("Unexpected end of JSON
+  // input") hóa ra không phải Cloudflare/middleware (_middleware.js đã được xem trực tiếp, chỉ gate
+  // /, /index.html, /admin.html, không đụng /api/*) mà là file cũ trên GitHub chưa đồng bộ với bản
+  // sửa. Giữ nguyên cách làm qua GET vì đã xác nhận hoạt động ổn định.
   // Query params khi action=clear:
   //   clear_kind = "access" | "qa" | "both"  (bắt buộc)
   //   clear_date = "YYYY-MM-DD"               (tùy chọn, bỏ trống = xóa TOÀN BỘ)
