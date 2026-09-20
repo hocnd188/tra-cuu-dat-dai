@@ -61,24 +61,6 @@ export async function getUser(request, env) {
   return { id: row.id, username: row.username, is_admin: !!row.is_admin };
 }
 
-// Ghi 1 dòng "lớp 0" cho user này — nhưng chỉ nếu CHƯA ghi trong 30 phút gần đây (tra trong chính bảng
-// ai_usage). Dùng bởi /api/me — xem chú thích đầy đủ trong file đó về lý do đặt log ở /api/me thay vì
-// trong getUser() (đã thử và có rủi ro không kiểm chứng được liên quan đến waitUntil).
-export async function logAccessOnce(env, userId, username) {
-  try {
-    await ensureSchema(env);
-    const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
-    const recent = await env.DB.prepare(
-      "SELECT id FROM ai_usage WHERE user_id = ? AND layer = '0' AND ts > ? ORDER BY id DESC LIMIT 1"
-    ).bind(userId, cutoff).first();
-    if (recent) return; // đã ghi trong 30 phút gần đây — bỏ qua, không ghi trùng
-  } catch (e) {
-    // Nếu việc kiểm tra trùng lặp lỗi vì lý do gì đó, vẫn tiếp tục ghi bình thường bên dưới — thà ghi
-    // dư một dòng còn hơn bỏ sót lượt truy cập thật vì một lỗi không liên quan đến việc ghi chính.
-  }
-  await logAccessAsQa(env, userId, username);
-}
-
 // Tự tạo bảng nếu D1 chưa có (an toàn khi quên chạy schema.sql).
 // Nhờ vậy trang tạo admin luôn hiện ra, không bao giờ kẹt vì thiếu bảng.
 let _schemaReady = false;
@@ -141,26 +123,6 @@ export async function logAccess(env, request, userId, username) {
     try {
       await env.DB.prepare("INSERT INTO debug_errors(ts,noi_dung,chi_tiet) VALUES(?,?,?)")
         .bind(new Date().toISOString(), "logAccess thất bại cho user_id=" + userId + " username=" + username, String(e && e.message || e)).run();
-    } catch (e2) {}
-  }
-}
-
-// Ghi 1 dòng "lớp 0" vào bảng ai_usage mỗi lần một tài khoản đăng nhập thành công — đại diện cho
-// việc "đã truy cập app" ngay cả khi người dùng sau đó không hề đụng vào Mục hỏi đáp. Nhờ vậy Nhật ký
-// hệ thống (kind=qa) hiển thị đủ MỌI người dùng đã vào app trong ngày, không chỉ những ai có thao tác
-// hỏi đáp thật. Cố tình KHÔNG ghi cau_hoi/model/ok (để NULL) để phân biệt với dòng hỏi đáp thật — cột
-// layer='0' là dấu hiệu duy nhất admin.html cần để hiển thị "0" ở cột LỚP và bỏ trống nội dung/KQ.
-// Không được để lỗi ghi log này làm hỏng luồng đăng nhập chính — cùng nguyên tắc với logAccess().
-export async function logAccessAsQa(env, userId, username) {
-  try {
-    await ensureSchema(env);
-    await env.DB.prepare(
-      "INSERT INTO ai_usage(user_id,username,ts,cau_hoi,model,ok,ghi_chu,layer) VALUES(?,?,?,?,?,?,?,?)"
-    ).bind(userId, username, new Date().toISOString(), null, null, null, "", "0").run();
-  } catch (e) {
-    try {
-      await env.DB.prepare("INSERT INTO debug_errors(ts,noi_dung,chi_tiet) VALUES(?,?,?)")
-        .bind(new Date().toISOString(), "logAccessAsQa thất bại cho user_id=" + userId + " username=" + username, String(e && e.message || e)).run();
     } catch (e2) {}
   }
 }

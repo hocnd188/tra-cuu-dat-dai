@@ -68,3 +68,45 @@ export async function onRequestGet({ request, env, waitUntil }) {
     today_err: (todayErr && todayErr.n) || 0,
   });
 }
+
+// Xóa Nhật ký hệ thống theo lựa chọn của admin — không thể hoàn tác. Chỉ admin được gọi.
+// Cùng route /api/system-log, phân biệt bằng phương thức POST (GET ở trên dùng để xem, POST dùng để
+// xóa) — tránh phải tạo file/route hoàn toàn mới, vốn từng gặp vấn đề khi upload qua GitHub web UI
+// trong dự án này (xem lịch sử functions/api/users/[id].js).
+// Body JSON: kind = "access" | "qa" | "both" (bắt buộc); date = "YYYY-MM-DD" (tùy chọn, bỏ trống = xóa TOÀN BỘ)
+export async function onRequestPost({ request, env }) {
+  await ensureSchema(env);
+  const u = await getUser(request, env);
+  if (!u || !u.is_admin) return json({ error: "forbidden" }, 403);
+
+  const { kind, date } = await request.json().catch(() => ({}));
+  if (kind !== "access" && kind !== "qa" && kind !== "both") {
+    return json({ error: "Thiếu hoặc sai tham số kind (access | qa | both)" }, 400);
+  }
+  const day = (date || "").trim();
+  if (day && !/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+    return json({ error: "Định dạng ngày không hợp lệ (cần YYYY-MM-DD)" }, 400);
+  }
+
+  let deletedAccess = 0, deletedQa = 0;
+  try {
+    if (kind === "access" || kind === "both") {
+      const stmt = day
+        ? env.DB.prepare("DELETE FROM access_log WHERE substr(ts,1,10) = ?").bind(day)
+        : env.DB.prepare("DELETE FROM access_log");
+      const r = await stmt.run();
+      deletedAccess = (r && r.meta && r.meta.changes) || 0;
+    }
+    if (kind === "qa" || kind === "both") {
+      const stmt = day
+        ? env.DB.prepare("DELETE FROM ai_usage WHERE substr(ts,1,10) = ?").bind(day)
+        : env.DB.prepare("DELETE FROM ai_usage");
+      const r = await stmt.run();
+      deletedQa = (r && r.meta && r.meta.changes) || 0;
+    }
+  } catch (e) {
+    return json({ error: "Lỗi khi xóa: " + String(e && e.message || e) }, 500);
+  }
+
+  return json({ ok: true, deleted_access: deletedAccess, deleted_qa: deletedQa });
+}

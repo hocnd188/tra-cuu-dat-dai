@@ -841,6 +841,11 @@ renderTabs();render();
 <a id="__authpw" href="#" style="color:#cfe8ff;text-decoration:underline">Đổi mật khẩu</a>
 <a id="__authout" href="#" style="color:#fff;text-decoration:underline">Đăng xuất</a></div>
 <script>(function(){fetch('/api/me').then(r=>r.json()).then(function(u){var w=document.getElementById('__authwho');if(w)w.textContent=(u.username||u.u||'');if(u.is_admin||u.r==='admin'){var a=document.getElementById('__authadmin');if(a)a.style.display='inline';}}).catch(function(){});
+// Ghi dấu "đã truy cập app" cho Nhật ký hệ thống (lớp "0") — dùng chung route /api/log-qa đã có sẵn
+// và đang chạy thật (khác với ping/me riêng đã thử trước và không hoạt động trên production), chỉ
+// thêm cờ ping:true để backend phân biệt. Chạy mỗi lần tải trang, kể cả khi phiên đăng nhập có sẵn
+// từ trước (không đi qua /api/login). Lỗi ở đây (mất mạng, chưa đăng nhập...) không hiển thị gì.
+fetch('/api/log-qa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ping:true})}).catch(function(){});
 var o=document.getElementById('__authout');if(o)o.onclick=function(e){e.preventDefault();fetch('/api/logout',{method:'POST'}).then(function(){location.reload();});};})();</script>
 <div class="citepop-overlay" id="pwOverlay" role="dialog" aria-modal="true">
   <div class="citepop" style="max-width:380px">
