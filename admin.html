@@ -270,9 +270,17 @@ load();loadAI();loadLocked();
     if(!confirm("Xóa vĩnh viễn nhật ký ["+typeTxt+"] cho "+scopeTxt+"?\nHành động này KHÔNG THỂ hoàn tác."))return;
     clMsg.style.color="#5a6472";clMsg.textContent="Đang xóa…";
     document.getElementById("clGo").disabled=true;
-    fetch("/api/system-log?"+new URLSearchParams({action:"clear",clear_kind:kind,clear_date:date}).toString())
+    fetch("/api/system-log?"+new URLSearchParams({action:"clear",clear_kind:kind,clear_date:date,_:Date.now()}).toString(),{cache:"no-store"})
       .then(async r=>{const d=await r.json();if(!r.ok)throw new Error(d.error||"Lỗi");return d;})
       .then(d=>{
+        if(typeof d.deleted_access!=="number"||typeof d.deleted_qa!=="number"){
+          // Dấu hiệu backend (system-log.js) chưa cùng phiên bản với admin.html này — ví dụ vẫn là bản
+          // cũ chưa có xử lý action=clear, nên rơi vào nhánh xem log bình thường (trả về kind/rows/...
+          // thay vì deleted_access/deleted_qa). Báo rõ ràng thay vì hiện "undefined" khó hiểu.
+          clMsg.style.color="#9d2f27";
+          clMsg.textContent="Phản hồi không đúng định dạng mong đợi — có thể functions/api/system-log.js trên máy chủ chưa phải bản mới nhất. Hãy kiểm tra lại file đã commit.";
+          return;
+        }
         clMsg.style.color="#1b7a43";
         clMsg.textContent="Đã xóa "+d.deleted_access+" dòng đăng nhập, "+d.deleted_qa+" dòng hỏi đáp.";
         slState.page=1;slLoad(); // tải lại bảng để phản ánh ngay dữ liệu đã xóa
